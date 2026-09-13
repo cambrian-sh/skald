@@ -1,0 +1,46 @@
+{
+  "name": "@cambrian/skald",
+  "version": "0.1.0",
+  "description": "Project context and memory setup for coding agents",
+  "license": "MIT",
+  "keywords": [
+    "coding-agent",
+    "project-context",
+    "project-memory",
+    "mcp",
+    "codebase-memory"
+  ],
+  "type": "module",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "bin": {
+    "skald": "./src/cli.ts"
+  },
+  "files": [
+    "README.md",
+    "src",
+    "vendor/engine"
+  ],
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "benchmark": "bun test --isolate test/context-quality.test.ts",
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "dev": "bun run src/cli.ts",
+    "prepublishOnly": "bun run check && bun run build && bun run scripts/release-publish-guard.ts",
+    "package:release": "bun run scripts/package-release.ts",
+    "stage:engine": "bun run scripts/stage-engine.ts",
+    "test": "bun test --isolate",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "bun-types": "^1.4.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
+  }
+}
