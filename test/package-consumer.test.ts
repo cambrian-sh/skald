@@ -50,6 +50,17 @@ test("published package exposes a durable CLI and project runtime", async () => 
     const archiveName = (await readdir(packageRoot)).find((name) => name.endsWith(".tgz"))
     expect(archiveName).toBeDefined()
     if (archiveName === undefined) throw new Error("package archive was not created")
+    const archiveEntries = Bun.spawnSync(["tar", "-tzf", join(packageRoot, archiveName)], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const entries = new TextDecoder().decode(archiveEntries.stdout)
+    expect(archiveEntries.exitCode).toBe(0)
+    expect(entries).toContain("package/CONTRIBUTING.md")
+    expect(entries).toContain("package/SECURITY.md")
+    expect(entries).toContain("package/ARCHITECTURE.md")
+    expect(entries).toContain("package/product.md")
+    expect(entries).toContain("package/CHANGELOG.md")
 
     const installed = runBun(["add", `file:${join(packageRoot, archiveName)}`], consumer)
     expect(installed.exitCode).toBe(0)

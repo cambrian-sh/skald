@@ -27,13 +27,14 @@ managed structural engine
     `-- Afşin's native codebase-memory-mcp today
 ```
 
-The current managed path targets Linux, macOS, and BSD descriptor-safe
-filesystem operations; unsupported platforms fail closed. MCP is an internal
-transport and an external compatibility surface. Skald verifies the complete
-16-tool Afşin registry and required input schemas, and offers a separate
-read-only semantic smoke gate for an indexed project. A developer should not
-have to assemble multiple unrelated tools to get a working project memory
-system.
+The official one-command release matrix is Linux amd64/arm64 and macOS
+arm64/amd64. Windows and BSD are not currently packaged or validated release
+targets; the managed filesystem layer fails closed where descriptor-safe
+operations are unavailable. MCP is an internal transport and an external
+compatibility surface. Skald verifies the complete 16-tool Afşin registry and
+required input schemas, and offers a separate read-only semantic smoke gate for
+an indexed project. A developer should not have to assemble multiple unrelated
+tools to get a working project memory system.
 
 ## Skald-owned subsystems
 
@@ -46,6 +47,11 @@ verifies its complete contract, and records its SHA-256 and commit. Cache,
 configuration, and knowledge default to `.skald/`; `.skald/r` is the runtime
 rendezvous when its absolute path is safe, while unusually deep roots use a
 deterministic private OS-runtime directory to stay within Unix socket limits.
+The managed `.skald/.gitignore` keeps engine binaries, cache/runtime state, and
+unreviewed session records out of Git while preserving promoted canonical
+knowledge as a shareable project artifact. Release CI builds native engine
+assets from Afşin's pinned source; `.gitignore` prevents new staged binaries
+from being added but cannot remove a blob already present in Git history.
 Custom external knowledge roots remain explicit and user-approved. A custom backend is
 replaceable behind the Skald context contract but is never the official default.
 Initialization also publishes a project-local Skald context runtime with
@@ -139,18 +145,13 @@ knowledge commits to the indexing lane.
 
 ## Release sequence
 
-1. Harden the substrate: safe files, process supervision, bounded transport,
-   trust policy, deterministic context selection.
-2. Ship platform-specific pinned Afşin engine assets with digest verification
-   and atomic project-local installation.
-3. Ship stale-on-query refresh, durable run history, and governed session
-   memory.
-4. Ship capability-negotiated adapters and opt-in hooks for the selected v1
-   clients.
-5. Expand signed provenance, client adapters, cross-platform fixtures, and
-   context-quality benchmark evidence as distribution breadth grows.
+The local Linux amd64 source and standalone flow has been exercised. A tagged
+four-target release, registry publication, native consumer matrix, and public
+repository baseline are still pending. The current release boundary is Linux
+and macOS; Windows/BSD support, proactive scheduling, broader adapters, and
+context-quality benchmark evidence remain roadmap work.
 
-The current local-first public claim is supported by these observable behaviors:
+The product claim to validate across every release target is:
 
 > Install Skald, run one command, and an agent can work from precise,
 > attributable, current project context without hand-built integration.

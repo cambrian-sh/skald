@@ -1,6 +1,6 @@
 # Skald comparison and ship audit
 
-Audit date: 2026-09-13
+Audit date: 2026-09-26
 
 This document compares the independent Skald product with the current Cambrian
 memory implementation, Afşin's codebase-memory-mcp work, and the original
@@ -10,9 +10,10 @@ component rather than asking developers to assemble or locate a second product.
 
 ## Sources inspected
 
-- Afşin's repository: `/home/doruk/Code/cambrian/codebase-memory-mcp`
+- Afşin's repository: <https://github.com/afsin-asf/codebase-memory-mcp>
 - Afşin's requested commit: `cf1d310a72320ec55e7b86a091561162567e55d2`
-- Cambrian knowledge repository: `/home/doruk/Code/cambrian-knowledge`
+- Cambrian knowledge repository used as the compatibility reference:
+  `cambrian-knowledge`
 - Cambrian knowledge HEAD observed during audit:
   `940913931bed0bb930c357f9fc9e01e4c867f346`
 - Skald product vision: [`product.md`](product.md)
@@ -34,8 +35,7 @@ The official staged Linux asset at
 exact Afşin commit. Its SHA-256 is
 `e872396e13442358e6f677aff1b33df732d74797625b87db0f27dbb42212dafe`, and the
 manifest records the source repository and commit. The separate
-`/home/doruk/.local/bin/codebase-memory-mcp` 0.8.1 binary is not used by the
-official path.
+older 0.8.1 development binary is not used by the official path.
 
 ## Capability comparison
 
@@ -50,8 +50,8 @@ official path.
 | Agent setup | Afşin installer has broad client/profile support | Capability registry for Claude Code, Codex global opt-in, and OpenCode; JSON/JSONC/TOML safe merging; optional Claude SessionStart hook | Satisfies the selected v1 clients and preserves legacy Cambrian entries |
 | Standards discovery | Agent installer surfaces and generated instruction profiles | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, Copilot instructions, Cursor rules, `.skills`, and common skill roots | Good portable baseline; instruction generation remains opt-in/future |
 | Retrieval | Rich structural, semantic, cross-repository and graph queries | `project_context` combines instructions, skills, knowledge, and capability-selected backend graph/search results with path and character budgets | Useful default context surface; advanced queries remain available on backend MCP |
-| Safety | Native engine scope, process, and cache controls | Descriptor-safe managed paths on Linux/macOS/BSD, no-follow symlinks, atomic writes, bounded discovery/input, MCP deadlines, user-scoped command/argument/digest trust, private Afşin runtime rendezvous, and external-knowledge approval | Strong setup boundary; unsupported managed-path platforms fail closed and repository config cannot authorize execution |
-| Distribution | Native binary, daemon, graph UI, installer/update path | Standalone Bun builds embed the pinned Afşin asset; the published `@cambrian/skald` package installs a matching platform companion; `setup` atomically installs it into project-local `.skald/engine/`, verifies the complete contract, and records its digest; release artifacts include checksums and GitHub build attestations | Linux amd64 package and standalone paths are proven; the release matrix still needs executed multi-platform conformance and a publisher release baseline |
+| Safety | Native engine scope, process, and cache controls | Descriptor-safe managed paths on the official Linux/macOS targets, no-follow symlinks, atomic writes, bounded discovery/input, MCP deadlines, user-scoped command/argument/digest trust, private Afşin runtime rendezvous, external-knowledge approval, and generated `.skald/.gitignore` | Strong local setup boundary; `.gitignore` prevents accidental new additions but is not access control and does not remove already tracked files |
+| Distribution | Native binary, daemon, graph UI, installer/update path | Standalone Bun builds embed the pinned Afşin asset; release packaging generates one universal `@cambrian/skald` package with four matching platform companions; `setup` installs into project-local `.skald/engine/`, verifies the complete contract, and records its digest | Linux amd64 source/package-consumer paths are proven locally; the public GitHub repo is empty, npm returns 404, and the four native release jobs have not run |
 
 ## What was wrong and is fixed
 
@@ -108,109 +108,116 @@ The implementation review found and fixed these release-blocking issues:
     the index run and degrades safely when it cannot be verified.
 15. Backend coverage metadata could be silently treated as a perfect index.
     `skipped` and `parse_partial` coverage now mark the recorded index degraded.
-16. The session writer exposed only four of the Cambrian knowledge kinds. It now
+16. A large workspace could be killed by the normal 15-second MCP deadline while
+    Afşin's index operation was still running. Indexing now uses a separate
+    bounded 10-minute deadline with an explicit override, while normal
+    handshakes and retrieval calls retain their shorter deadline. A successful
+    Git status whose output exceeds Skald's capture limit is now classified as
+    dirty rather than unknown, so large workspaces retain truthful freshness
+    state.
+17. The session writer exposed only four of the Cambrian knowledge kinds. It now
     supports components, contracts, investigations, and research as well as
     ADRs, decisions, observations, and measurements.
-17. Repeated session writes accumulated identical discoveries. Session records
+18. Repeated session writes accumulated identical discoveries. Session records
     now use deterministic content fingerprints and return an idempotent
     `exists` receipt.
-18. External canonical knowledge made local session records invisible. Context
+19. External canonical knowledge made local session records invisible. Context
     and doctor now merge the project-local session lane with the configured
     canonical directory.
-19. Capability negotiation checked only tool names and could send unsupported
+20. Capability negotiation checked only tool names and could send unsupported
     arguments. Skald now filters generated arguments against advertised input
     schemas and asks Afşin for index status and scoped coverage when available.
-20. A trusted engine pathname could be replaced after attestation and before
+21. A trusted engine pathname could be replaced after attestation and before
     spawn. Pinned invocations now execute a freshly verified private snapshot
     and remove it after the process exits.
-21. Afşin's default daemon rendezvous could collide with a stale account daemon,
+22. Afşin's default daemon rendezvous could collide with a stale account daemon,
     or a long custom parent could exceed Unix socket path limits. Skald now
     supplies a project-and-engine-scoped `.skald/r` runtime when its absolute
     path is safe, and a deterministic short private OS-runtime rendezvous for
     oversized roots, while preserving explicit values.
-22. Managed-file safety had a pathname-based fallback on platforms without
+23. Managed-file safety had a pathname-based fallback on platforms without
     descriptor traversal. That fallback is removed; Skald now fails closed
     before managed reads or writes on unsupported platforms.
-23. Repository manifests and existing agent configuration could previously be
+24. Repository manifests and existing agent configuration could previously be
     mistaken for execution authority. Skald now requires a user-scoped trust
     record for backend execution; explicit commands create that record, while
     repository-controlled `trust` and digest fields are only evidence to check.
-24. A trusted binary could be invoked with changed arguments or with an
+25. A trusted binary could be invoked with changed arguments or with an
     arbitrary environment injected through a repository config. Trust records
     now bind the exact argument vector, persisted configs accept only the
     supported backend environment, and generated agent configs omit untrusted
     backend entries while retaining the Skald context server.
-25. External `CBM_KNOWLEDGE_DIR` paths could be read merely because a project
+26. External `CBM_KNOWLEDGE_DIR` paths could be read merely because a project
     named them. Skald now allows project-local roots automatically and requires
     explicit user approval for external roots; session memory remains available
     when canonical external knowledge is unavailable.
-26. Trust registry updates could lose concurrent approvals. User-scoped trust
+27. Trust registry updates could lose concurrent approvals. User-scoped trust
     updates now retry around atomic concurrent-file conflicts and verify the
     resulting entry.
-27. Persisted context sources could drift from an explicitly configured
+28. Persisted context sources could drift from an explicitly configured
     `CBM_KNOWLEDGE_DIR`. Existing JSONC manifests now update only the targeted
     knowledge source path while preserving comments and unrelated fields.
-28. A fresh developer still had to locate Afşin's native engine manually.
+29. A fresh developer still had to locate Afşin's native engine manually.
     `setup` now installs the embedded, pinned Afşin asset into `.skald/`,
     verifies the complete contract, records its digest, and adopts it for the
     project. `init` remains the offline configuration path when an engine is
     already present or a custom backend is intentionally supplied.
-29. A stale trusted graph could be used indefinitely after the repository
+30. A stale trusted graph could be used indefinitely after the repository
     changed. The default `onQuery: refresh` policy now performs a bounded fast
     refresh before structural retrieval when clean revision drift is detected,
     avoids repeated indexing in dirty worktrees, and records whether the run was
     setup, manual, or automatic.
-30. Session discoveries had no governed path into canonical project memory.
+31. Session discoveries had no governed path into canonical project memory.
     Review, explicit promotion, conflict detection, revision anchoring, and
     rejection now provide a durable decision boundary without mutating
     configured canonical roots.
-31. Agent integration behavior was spread across client-specific branches and
+32. Agent integration behavior was spread across client-specific branches and
     Claude had no optional session-start context injection. A capability
     registry now describes supported surfaces, and `--hooks` installs an
     idempotent, preserved Claude SessionStart hook.
-32. Re-running setup could leave an old project-local context runtime that did
+33. Re-running setup could leave an old project-local context runtime that did
     not contain new Skald behavior. Runtime publication now refreshes an
     existing generated runtime atomically and reports `updated`.
-33. Managed installation accepted exact package versions that were not backed by
+34. Managed installation accepted exact package versions that were not backed by
     checked-in integrity metadata, which still allowed install lifecycle code to
     run before provenance was established. The managed path now fails closed for
     unknown versions; each supported release must have an archive integrity pin.
-34. The archive-size guard previously ran after loading the entire HTTP response
+35. The archive-size guard previously ran after loading the entire HTTP response
     into memory. Pinned downloads now stream to a private staging file, hash each
     chunk, and abort at the 64 MiB boundary.
-35. Generated context launchers used bare `bun`/`bunx`, leaving interpreter
+36. Generated context launchers used bare `bun`/`bunx`, leaving interpreter
     selection to mutable `PATH`. Generated MCP entries and Claude hooks now use
     absolute executables and project-local absolute runtime paths.
-36. Compiled standalone setup could fall back to an absolute path inside the
+37. Compiled standalone setup could fall back to an absolute path inside the
     original launcher location. It now publishes a private executable copy under
     `.skald/context-runtime` and configures clients to launch that copy.
-37. The manifest type exposed `beforeWrite: warn` but validation rejected it,
+38. The manifest type exposed `beforeWrite: warn` but validation rejected it,
     making the documented policy choice unusable. Manifest validation and tests
     now support both `warn` and the strict default `require-verify`.
-38. Automatic stale refresh could repeatedly re-index a dirty worktree because
+39. Automatic stale refresh could repeatedly re-index a dirty worktree because
     every successful refresh correctly remained stale while uncommitted files
     existed. Automatic refresh now runs only for clean revision drift; dirty
     worktrees receive an explicit warning and require `project_refresh`.
-39. The final client path audit found Codex's global backend entry could bypass
+40. The final client path audit found Codex's global backend entry could bypass
     Skald's supervised `backend` proxy even though Claude and OpenCode used it.
     Trusted Codex installation now routes the backend through Skald's verified
     runtime as well; a regression test covers the generated TOML.
-40. Package QA now builds and installs the actual packed archive in an isolated
+41. Package QA now builds and installs the actual packed archive in an isolated
     consumer, invokes the packaged CLI, initializes a project, and starts the
     generated MCP runtime. This closes the source-tree-only distribution gap.
-41. Dirty-worktree freshness now excludes Skald-managed Claude hook settings;
+42. Dirty-worktree freshness now excludes Skald-managed Claude hook settings;
     generated client files no longer make a clean source tree appear stale.
-42. Managed text writes and descriptor reads now enforce byte limits during the
+43. Managed text writes and descriptor reads now enforce byte limits during the
     operation, including files that grow concurrently, while standalone binary
     publication retains a separate bounded 512 MiB allowance for Afşin's native
     asset.
-43. Initialization now completes configuration and engine preflight before
+44. Initialization now completes configuration and engine preflight before
     publishing project integration. A failed initial index leaves no project
     manifest, client configuration, context runtime, or user trust approval.
-44. The context MCP server now rejects malformed JSON-RPC envelopes with the
+45. The context MCP server now rejects malformed JSON-RPC envelopes with the
     standard invalid-request error instead of accepting missing or wrong
     protocol versions.
-45. Afşin compatibility was previously only checked through a minimum
+46. Afşin compatibility was previously only checked through a minimum
     capability probe. Skald now has an explicit complete-contract gate that
     verifies all 16 tools from the requested `cf1d310` registry and the
     required input fields in their advertised JSON schemas. Its optional
@@ -218,7 +225,7 @@ The implementation review found and fixed these release-blocking issues:
     project, including status, coverage, schema, architecture, graph search,
     code search, Cypher, graph comparison, change detection, ADR reading,
     tracing, and source snippets.
-46. Cambrian's knowledge synchronization and reconciliation were previously
+47. Cambrian's knowledge synchronization and reconciliation were previously
     external to Skald. Skald now owns an explicit Cambrian-compatible
     implementation of revision-anchor reconciliation, stale artifact detection,
     broken supersession-chain detection, duplicate identifiers, evidence-based status
@@ -226,6 +233,37 @@ The implementation review found and fixed these release-blocking issues:
     `knowledge index` provides the complete sync-then-index lifecycle using
     Afşin's public `index_repository` contract because the requested Afşin
     registry does not expose a native MCP `index_knowledge` tool.
+48. Distribution preparation previously created a different universal npm
+    package from each platform build and had no tag-triggered publication path.
+    Releases now build one target-specific engine companion per matrix entry,
+    merge and validate all four pinned engine manifests before packing exactly
+    one universal CLI archive, attach licenses, SHA-256 sums, and GitHub
+    artifact attestations, and publish matching packages through OIDC after a
+    version-matched tag reaches the default branch. Before creating a GitHub
+    Release, it installs the published CLI on all four native targets and
+    exercises setup, Afşin conformance, and context retrieval. The initial npm
+    package seed and trusted-publisher setup remain maintainer actions because
+    npm only permits configuring trusted publishing for packages that already
+    exist.
+49. Compiled standalone setup tried to build a project-local JavaScript runtime
+    from Bun's virtual `/$bunfs` filesystem, then exposed that internal `FileNotFound`
+    detail even though it successfully copied the standalone executable. It now
+    detects compiled mode before attempting source bundling and reports the
+    successful project-local binary runtime without leaking the fallback error.
+50. One-command setup installed a roughly 294 MB engine and graph/cache state
+    under `.skald/` without protecting those files from accidental Git adds.
+    `init` and `setup` now preflight and maintain a marked `.skald/.gitignore`
+    block for engine/cache, daemon rendezvous, state, launchers, and private
+    session memory. Project-specific rules are preserved, while promoted
+    `.skald/knowledge-canonical/` records remain visible. A Git-status
+    integration test verifies the real behavior.
+51. A clean checkout's CI build depended on the checked-in native executable.
+    CI now checks out Afşin's pinned commit, builds the runner-native binary,
+    stages it, then builds Skald. Root `.gitignore` also excludes future staged
+    engine files. This does not remove the existing blob from prior Git commits.
+52. README links to user and maintainer guides now point to documents included
+    in both the source package and the generated universal npm archive; a
+    package-archive test checks the packed contents.
 
 ## Original vision coverage
 
@@ -247,16 +285,27 @@ behavior remains client-owned.
 
 ## Residual product work
 
-The local-first workflow is technically verified as a release candidate, but
-publication still requires a committed/tagged baseline and package-owner release
-process. Remaining work is release breadth and evidence rather than a missing
-core loop:
+The local-first workflow is technically verified on Linux amd64 as a release
+candidate. The tagged release pipeline is implemented, but no tagged
+multi-platform release has executed. Remaining blockers include distribution
+integrity and release evidence:
 
-- signed, platform-specific native assets for every supported target, generated
-  from and checked against the pinned Afşin commit;
+- the local `master` history still contains the 294,355,704-byte binary at
+  `vendor/engine/linux-amd64/codebase-memory-mcp`, introduced by commit
+  `ef67ce9` (`feat: launch Skald project context product`). GitHub rejects
+  individual files over 100 MB. `.gitignore` cannot remove this historical
+  object. The public [GitHub repository](https://github.com/cambrian-sh/skald)
+  is empty, so this history has not been published; rewriting local history is
+  still required before the first push and needs explicit authorization;
+- npm returns 404/not-found-or-no-access for `@cambrian/skald`; bootstrap the
+  five package names and configure their trusted publishers after the source
+  baseline is pushed;
+- protect the default branch and `v*` tags, then execute the full four-target
+  release and its published-package/standalone consumer gates on native runners;
 - more client adapters and client-specific instruction injection where their
   APIs support it;
-- Windows/macOS/BSD conformance runs and migration fixtures;
+- broaden supported platforms beyond Linux and macOS; Windows and BSD are not
+  current setup targets, and no conformance claim is made for them;
 - optional background scheduling for teams that want proactive indexing rather
   than refresh-on-query;
 - richer change/session retrieval and measurable context-quality benchmarks.
@@ -281,12 +330,16 @@ the official engine.
 
 ## Release conclusion
 
-The current working tree is a technically verified local-first release candidate
-pending a committed/tagged baseline. The embedded Linux asset has passed the
-complete Afşin contract gate, compiled standalone setup with real indexing, and
-the packed-consumer loop. Skald is a monolithic developer experience: it owns
-setup, lifecycle, context, memory, safety, knowledge automation, and adapters,
-while Afşin's native engine is shipped inside that same product as the isolated
-structural-analysis component. The trust boundary remains explicit: repository
-configuration can describe a backend, but only the official setup path or a
-user-scoped approval can authorize execution.
+The source implementation and Linux amd64 standalone consumer path are
+technically verified: `bun run check` passes 115 tests, `bun run build` embeds
+the pinned engine, and a disposable project completed setup, fast indexing,
+16-tool conformance, context retrieval, and doctor checks. The initial empty
+project's doctor result is `warn` only because it has no durable knowledge
+records; engine, index, and freshness checks pass.
+
+This is not yet production-distributable to other developers. The local branch
+cannot be pushed until the historical 294 MB blob is removed, the public npm
+packages do not resolve, and the four native release jobs have not run. The
+supported claim today is limited to the locally verified Linux amd64 path; the
+official release matrix is Linux/macOS, not Windows/BSD. Do not describe Skald
+as released or universally supported until those gates have evidence.

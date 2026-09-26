@@ -1,7 +1,8 @@
 # Skald
 
-The npm package is published as `@cambrian/skald` because the unscoped `skald`
-name is already occupied; its installed executable remains `skald`.
+The package is named `@cambrian/skald` because the unscoped `skald` name is
+already occupied; its installed executable is `skald`. The first public npm
+and GitHub release has not been cut yet.
 
 Skald is a Bun-powered modular monolith for project context and memory for
 Claude Code, Codex, and OpenCode. It discovers project guidance, owns the
@@ -18,18 +19,17 @@ advanced extension; discovery never grants it execution authority.
 
 ## Requirements
 
-- Bun 1.3 or newer
-- The checked-in development asset is Linux amd64; release builds stage a
-  matching pinned Afşin asset for each supported target before publication
-- The fully managed filesystem path is currently supported on Linux, macOS, and
-  BSD; Windows fails closed for managed project writes until descriptor-safe
-  support exists
+- Bun 1.3 or newer for the package-manager install
+- No runtime dependency for the standalone GitHub Release executables
+- Official one-command releases target Linux amd64/arm64 and macOS amd64/arm64
+- Windows and BSD are not official release targets; Windows managed writes fail
+  closed, and no bundled native engine is published for either platform
 - `skald setup` installs the pinned Afşin engine shipped for the current target;
   `skald init` remains available as an offline configuration path
 
-Managed project files currently require Linux, macOS, or a BSD with
-descriptor-safe directory operations. On other platforms Skald fails closed
-before writing; it does not silently downgrade the filesystem safety guarantee.
+Managed filesystem operations require descriptor-safe directory operations.
+The supported release matrix is Linux and macOS; filesystem capability alone
+does not imply that a platform has a bundled engine or a supported setup path.
 
 ## Install and use
 
@@ -39,7 +39,19 @@ Once published, install and set up a project with:
 bunx @cambrian/skald setup
 ```
 
+For a standalone install, download the matching `skald-<os>-<arch>` executable
+and its `.sha256` file from
+[GitHub Releases](https://github.com/cambrian-sh/skald/releases/latest), then
+verify with `shasum -a 256 -c skald-<os>-<arch>.sha256` (or
+`sha256sum -c skald-<os>-<arch>.sha256`), mark it executable, and run `setup`.
+The release also includes Skald's and Afşin's license texts. This build embeds the
+matching Afşin engine and does not require Bun or a separate engine download.
+The exact release and registry setup is documented in [RELEASING.md](RELEASING.md).
+
 From this repository:
+
+First stage the pinned Afşin engine for this host as documented in
+[CONTRIBUTING.md](CONTRIBUTING.md). Then run:
 
 ```sh
 bun install
@@ -59,7 +71,8 @@ Skald will:
    Git revision, coverage status, and bounded run history; a failed initial
    index publishes no project integration.
 6. Publish the manifest, bootstrap, runtime, and selected Claude/OpenCode
-   configuration, and report that Codex requires explicit global installation.
+   configuration, protect local runtime artifacts with `.skald/.gitignore`,
+   and report that Codex requires explicit global installation.
 
 The initializer compiles a project-local context runtime at
 `.skald/context-runtime.mjs` and configures Claude Code and OpenCode with an
@@ -70,10 +83,12 @@ to `.skald/context-runtime` and configures the clients to launch the project-loc
 copy, so the original launcher can be moved or removed after setup.
 
 Existing files are parsed before writes, comments are preserved for JSONC, and
-managed paths reject symlinks and publish atomically on Linux, macOS, and BSD.
+managed paths reject symlinks and publish atomically on supported Linux and
+macOS targets.
 Skald fails closed before managed reads or writes on platforms without the
 descriptor-safe filesystem primitives required for that guarantee. Use
-`--dry-run` to inspect the complete plan without changing files:
+`--dry-run` to preview the project and agent configuration plan without
+changing files:
 
 ```sh
 skald init --dry-run --json
@@ -91,8 +106,8 @@ skald engine conformance --smoke
 skald engine serve
 ```
 
-`setup` is the one-command path. The published Skald package installs its
-matching platform companion containing Afşin's asset, pinned to commit
+`setup` is the one-command path. The npm distribution installs its matching
+platform companion containing Afşin's asset, pinned to commit
 `cf1d310a72320ec55e7b86a091561162567e55d2`; setup copies it into the project
 boundary, verifies all 16 tools and required input schemas, records its
 SHA-256, and runs the initial index. No MCP path or `CBM_KNOWLEDGE_DIR` is
@@ -122,15 +137,22 @@ The official asset and every generated engine directory live under `.skald/`:
 
 ```text
 .skald/
-├── engine/codebase-memory-mcp
-├── engine/cache/
-├── engine/config/
-├── r/                         # default rendezvous; deep roots use an ephemeral short path
-├── knowledge/
+├── .gitignore                 # keeps local runtime/session artifacts out of Git
+├── engine/                    # executable, graph cache, engine config (ignored)
+├── r/                         # daemon rendezvous (ignored)
+├── knowledge/                 # private session records (ignored)
+├── knowledge-canonical/       # explicitly promoted, shareable records
+├── context-runtime*           # generated launchers (ignored)
 ├── config.json
 ├── context.md
-└── state.json
+└── state.json                 # per-checkout index/freshness state (ignored)
 ```
+
+Skald preserves custom `.skald/.gitignore` content and manages only its marked
+block. Commit the config, context guide, ignore file, and promoted canonical
+knowledge as appropriate; local engine binaries, graph state, launchers, and
+unreviewed session notes stay out of Git. Ignore rules do not remove files that
+were already committed or staged.
 
 `engine install --package <exact-spec>` remains a legacy compatibility channel
 for existing installations. It is never selected by `setup` and is not the
@@ -171,9 +193,11 @@ For a custom or locally built engine, explicitly adopt its executable:
 skald init --mcp-command /absolute/path/to/codebase-memory-mcp
 ```
 
-Backend handshakes and tool calls have a finite 15-second deadline by default.
-Set `SKALD_MCP_TIMEOUT_MS` to tune it between 100 ms and 10 minutes when a
-larger project needs more time.
+Backend handshakes and normal tool calls have a finite 15-second deadline by
+default. Indexing is a long-running operation and has its own 10-minute
+deadline by default. Set `SKALD_MCP_TIMEOUT_MS` to tune both deadlines, or set
+`SKALD_INDEX_TIMEOUT_MS` to tune indexing independently; each value is bounded
+between 100 ms and 10 minutes.
 
 Skald passes a small safe environment allowlist to backend processes. Explicit
 backend variables work for the invocation that approved them, but secret-looking
@@ -303,19 +327,32 @@ bun run check
 bun run build
 ```
 
-`bun run build` creates a standalone Bun executable at `dist/skald`. Its
+`bun run build` creates a standalone Bun executable at `dist/skald` and requires
+the pinned Afşin engine for the current host to be staged under
+`vendor/engine/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for a clean-checkout
+build; CI and release workflows build and stage the engine automatically. The
 compiled setup path creates a project-local executable runtime when source
-bundling is unavailable; the generated agent configuration contains that
-project-local absolute path.
+bundling is unavailable.
 
-This is a technically verified local-first release candidate pending a committed
-and tagged release baseline: `skald setup` installs the bundled or platform-companion Afşin engine,
+The Linux amd64 standalone path has been exercised through setup, indexing,
+Afşin conformance, and context retrieval. The four native release jobs, npm
+publication, and public GitHub release are still pending. `skald setup` installs the bundled or platform-companion Afşin engine,
 configures the selected clients, indexes the project, refreshes stale trusted
 indexes on demand, and exposes governed project memory. `engine conformance`
 verifies all 16 Afşin registry tools and required input fields; `--smoke`
 additionally exercises safe read-only graph operations against an indexed
-project. Release builds stage one native asset per supported platform with
-`bun run stage:engine` and produce the root package plus its matching native
-companion with `bun run package:release`. Publish those generated archives from
-the release workflow; publishing the source tree directly is intentionally
-blocked because it would omit companion assets on other platforms.
+project. Each release build stages one native asset per supported platform with
+`bun run stage:engine` and packages its matching companion with
+`bun run package:release`. The release workflow merges and
+validates all four manifests before producing exactly one universal root package.
+It publishes version-matched packages and self-contained executables from a
+`v<package-version>` tag; publishing the source tree directly remains blocked.
+
+## Project and maintainer docs
+
+- [Product and scope](product.md)
+- [Architecture and trust boundaries](ARCHITECTURE.md)
+- [Security model and reporting](SECURITY.md)
+- [Contributing and local builds](CONTRIBUTING.md)
+- [Release process](RELEASING.md)
+- [Changelog](CHANGELOG.md)

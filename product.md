@@ -92,10 +92,12 @@ The product relationship is:
 Skald is an independent project under the Code workspace. It is implemented in
 TypeScript and runs on Bun.
 
-The current implementation is a technically verified local-first release
-candidate pending a committed and tagged release baseline. Its supported
-managed path is Linux, macOS, and BSD; Windows fails closed for managed writes.
-It is the product boundary for future distribution breadth. Its CLI can:
+The current working tree is a technically verified local-first release
+candidate, not yet a public release. The official native target matrix is Linux
+amd64/arm64 and macOS arm64/amd64. Windows and BSD do not have bundled Afşin
+engine releases and are not supported setup targets; Windows managed writes
+fail closed. The local Linux amd64 setup/index/context path is verified, while
+the four-target release workflow has not yet run. The CLI can:
 
 - discover the nearest Git project;
 - report existing agent instruction files and portable skills;
@@ -109,6 +111,9 @@ It is the product boundary for future distribution breadth. Its CLI can:
 - install the bundled or platform-companion Afşin `codebase-memory-mcp` asset into `.skald/engine/`,
   verify its pinned commit and complete 16-tool contract, and retain its
   digest in project state;
+- create a managed `.skald/.gitignore` block so local engines, graph/cache
+  state, launchers, and unreviewed session memory do not become accidental Git
+  artifacts, while promoted canonical knowledge remains shareable;
 - combine Afşin's graph and code search capabilities when available, with
   conservative fallback for compatible MCP backends;
 - record engine digest, Git revision, working-tree state, and degraded coverage
@@ -308,11 +313,20 @@ developer or agent integration.
 
 ## Release-critical product direction
 
-The remaining release work is distribution breadth and evidence:
+Before the first public release:
+
+- remove the oversized engine blob from the unpublished local Git history and
+  publish a clean repository baseline;
+- bootstrap the first five npm packages and configure trusted publishers;
+- run the native build, standalone, conformance, and consumer gates on all four
+  supported Linux/macOS targets.
+
+After that release gate, the product roadmap is:
 
 - project profiles for Cambrian and other backends;
-- signed, platform-specific native assets generated from and checked against the
-  pinned Afşin commit;
+- portable Windows/BSD setup and native engine support;
+- publisher signatures/notarization in addition to the current checksums and
+  GitHub artifact attestations;
 - richer backend query and retrieval policies;
 - richer change/session retrieval and context-quality benchmarks;
 - more client adapters, migration fixtures, and cross-platform conformance;
