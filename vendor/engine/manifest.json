@@ -7,13 +7,5 @@
     "commit": "cf1d310a72320ec55e7b86a091561162567e55d2",
     "releaseLine": "0.10.8"
   },
-  "assets": [
-    {
-      "platform": "linux",
-      "arch": "amd64",
-      "path": "linux-amd64/codebase-memory-mcp",
-      "sha256": "e872396e13442358e6f677aff1b33df732d74797625b87db0f27dbb42212dafe",
-      "bytes": 294355704
-    }
-  ]
+  "assets": []
 }
