@@ -291,13 +291,14 @@ candidate. The tagged release pipeline is implemented, but no tagged
 multi-platform release has executed. Remaining blockers include distribution
 integrity and release evidence:
 
-- the public [GitHub repository](https://github.com/cambrian-sh/skald) is still
-  empty. The rewritten local `master` no longer contains the 294,355,704-byte
-  engine binary; original history is retained only in local backup refs. Push
-  the clean baseline after the source-checkout verification passes;
-- npm returns 404/not-found-or-no-access for `@cambrian/skald`; bootstrap the
-  five package names and configure their trusted publishers after the source
-  baseline is public;
+- the public [GitHub repository](https://github.com/cambrian-sh/skald) now has
+  the clean `master` baseline at `6f24d84cad63da0661e685b8183bb5441a02121d`.
+  The branch contains no blob over 100 MB. Pre-rewrite history, including the
+  294,355,704-byte engine blob, remains only in local backup refs and was not
+  pushed;
+- the npm registry returns E404 or no-access for `@cambrian/skald`. Bootstrap
+  the five package names and configure their trusted publishers; initial
+  package creation and publisher setup remain maintainer actions;
 - protect the default branch and `v*` tags, then execute the full four-target
   release and its published-package/standalone consumer gates on native runners;
 - more client adapters and client-specific instruction injection where their
@@ -328,17 +329,20 @@ the official engine.
 
 ## Release conclusion
 
-The source implementation and Linux amd64 standalone consumer path are
-technically verified: `bun run check` passes 115 tests, `bun run build` embeds
-the pinned engine, and a disposable project completed setup, fast indexing,
-16-tool conformance, context retrieval, and doctor checks. The initial empty
-project's doctor result is `warn` only because it has no durable knowledge
-records; engine, index, and freshness checks pass.
+The source-only check passes 115 tests with one intentional skip when no
+Afşin asset is staged; the skipped Cambrian setup acceptance test was also run
+successfully against both a staged engine and the compiled standalone CLI.
+`bun run build` embeds the pinned engine, and a disposable project completed
+standalone setup while retaining Cambrian's canonical knowledge directory.
+Earlier end-to-end QA also covered fast indexing, 16-tool conformance, context
+retrieval, and doctor checks. The initial empty project's doctor result is
+`warn` only because it has no durable knowledge records; engine, index, and
+freshness checks pass.
 
 This is not yet production-distributable to other developers. Local `master` is
-now free of the historical 294 MB blob and ready for a normal first push, but
-the public npm packages do not resolve and the four native release jobs have
-not run. The supported claim today is limited to the locally verified Linux
-amd64 path; the official release matrix is Linux/macOS, not Windows/BSD. Do not
-describe Skald as released or universally supported until those gates have
-evidence.
+now pushed and tracks `origin/master`, and it is free of the historical 294 MB
+blob. However, the public npm package still returns E404 or no-access and the
+four native release jobs have not run. The supported claim today is limited to
+the locally verified Linux amd64 path; the official release matrix is
+Linux/macOS, not Windows/BSD. Do not describe Skald as released or universally
+supported until those gates have evidence.
