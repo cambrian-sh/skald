@@ -5,10 +5,10 @@ branch. A release publishes one universal `@cambrian/skald` package, four
 OS/CPU-constrained Afşin engine companions, and four self-contained executable
 downloads.
 
-Before the first push, ensure the history being published contains no large
-generated engine binaries; `.gitignore` prevents new binaries from being staged
-but cannot remove a blob already committed. Check the repository's ship audit
-for the current first-release status.
+Native engine executables are generated release assets, not Git source.
+`.gitignore` prevents new untracked binaries from being staged but cannot
+untrack a binary already committed. Inspect the published history before any
+push or release, and use the ship audit for current release readiness.
 
 Before enabling releases, protect the default branch with the repository's
 required review/CI checks and add a tag ruleset restricting `v*` creation to

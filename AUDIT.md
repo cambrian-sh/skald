@@ -30,12 +30,13 @@ does not expose a separate MCP `index_knowledge` tool in its 16-tool registry;
 Skald therefore owns the sync/reconcile orchestration and invokes the public
 `index_repository` contract after synchronization.
 
-The official staged Linux asset at
-`vendor/engine/linux-amd64/codebase-memory-mcp` is the root binary from the
-exact Afşin commit. Its SHA-256 is
-`e872396e13442358e6f677aff1b33df732d74797625b87db0f27dbb42212dafe`, and the
-manifest records the source repository and commit. The separate
-older 0.8.1 development binary is not used by the official path.
+The Linux/amd64 standalone artifact used for local verification embedded the
+root binary from the exact Afşin commit. Its engine SHA-256 was
+`e872396e13442358e6f677aff1b33df732d74797625b87db0f27dbb42212dafe`. The
+generated native executable has been removed from the publishable Git history;
+the source manifest is intentionally asset-free until a host-specific build is
+staged. The separate older 0.8.1 development binary is not used by the official
+path.
 
 ## Capability comparison
 
@@ -290,16 +291,13 @@ candidate. The tagged release pipeline is implemented, but no tagged
 multi-platform release has executed. Remaining blockers include distribution
 integrity and release evidence:
 
-- the local `master` history still contains the 294,355,704-byte binary at
-  `vendor/engine/linux-amd64/codebase-memory-mcp`, introduced by commit
-  `ef67ce9` (`feat: launch Skald project context product`). GitHub rejects
-  individual files over 100 MB. `.gitignore` cannot remove this historical
-  object. The public [GitHub repository](https://github.com/cambrian-sh/skald)
-  is empty, so this history has not been published; rewriting local history is
-  still required before the first push and needs explicit authorization;
+- the public [GitHub repository](https://github.com/cambrian-sh/skald) is still
+  empty. The rewritten local `master` no longer contains the 294,355,704-byte
+  engine binary; original history is retained only in local backup refs. Push
+  the clean baseline after the source-checkout verification passes;
 - npm returns 404/not-found-or-no-access for `@cambrian/skald`; bootstrap the
   five package names and configure their trusted publishers after the source
-  baseline is pushed;
+  baseline is public;
 - protect the default branch and `v*` tags, then execute the full four-target
   release and its published-package/standalone consumer gates on native runners;
 - more client adapters and client-specific instruction injection where their
@@ -337,9 +335,10 @@ the pinned engine, and a disposable project completed setup, fast indexing,
 project's doctor result is `warn` only because it has no durable knowledge
 records; engine, index, and freshness checks pass.
 
-This is not yet production-distributable to other developers. The local branch
-cannot be pushed until the historical 294 MB blob is removed, the public npm
-packages do not resolve, and the four native release jobs have not run. The
-supported claim today is limited to the locally verified Linux amd64 path; the
-official release matrix is Linux/macOS, not Windows/BSD. Do not describe Skald
-as released or universally supported until those gates have evidence.
+This is not yet production-distributable to other developers. Local `master` is
+now free of the historical 294 MB blob and ready for a normal first push, but
+the public npm packages do not resolve and the four native release jobs have
+not run. The supported claim today is limited to the locally verified Linux
+amd64 path; the official release matrix is Linux/macOS, not Windows/BSD. Do not
+describe Skald as released or universally supported until those gates have
+evidence.

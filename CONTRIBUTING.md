@@ -47,9 +47,8 @@ For macOS, build with `scripts/build.sh --arch arm64` on Apple Silicon or
 and Skald's `--arch arm64` or `amd64`, respectively. The release workflow is
 authoritative for all four targets. Staging updates
 `vendor/engine/manifest.json`; inspect that change. The root ignore rule keeps
-newly staged native executables out of Git; one legacy Linux executable is
-already tracked in the unpublished history, so do not treat the ignore rule as
-history cleanup. See [RELEASING.md](RELEASING.md) before the first push. The
+newly staged native executables out of Git; it cannot untrack a binary already
+committed. Review [RELEASING.md](RELEASING.md) before pushing or publishing. The
 source tree's `bun run build` produces a host-specific standalone executable,
 not a cross-compiled release.
 
