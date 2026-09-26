@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   conformMcpEngine,
+  indexProjectDetailed,
   indexResponseStatus,
   locateMcpEngine,
   probeMcpEngine,
@@ -160,6 +161,42 @@ done
   expect(result.missingTools).toEqual([])
   expect(result.schemaFailures).toEqual([])
   expect(result.unexpectedTools).toEqual([])
+})
+
+test("gives indexing a longer operation budget than normal MCP requests", async () => {
+  fixtureRoot = await mkdtemp(join(tmpdir(), "skald-engine-index-timeout-"))
+  const enginePath = join(fixtureRoot, "engine.sh")
+  await writeFile(
+    enginePath,
+    `#!/bin/sh
+while IFS= read -r request; do
+  case "$request" in
+    *'"id":1'*) printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}' ;;
+    *'"id":2'*) sleep 0.2; printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"structuredContent":{"indexed":true}}}' ;;
+  esac
+done
+`,
+  )
+  await chmod(enginePath, 0o755)
+  const inheritedMcpTimeout = process.env["SKALD_MCP_TIMEOUT_MS"]
+  const inheritedIndexTimeout = process.env["SKALD_INDEX_TIMEOUT_MS"]
+  process.env["SKALD_MCP_TIMEOUT_MS"] = "100"
+  process.env["SKALD_INDEX_TIMEOUT_MS"] = "1000"
+  try {
+    const result = await indexProjectDetailed(
+      fixtureRoot,
+      { command: enginePath, args: [] },
+      "fast",
+    )
+
+    expect(result.exitCode).toBe(0)
+    expect(result.response).toEqual({ indexed: true })
+  } finally {
+    if (inheritedMcpTimeout === undefined) delete process.env["SKALD_MCP_TIMEOUT_MS"]
+    else process.env["SKALD_MCP_TIMEOUT_MS"] = inheritedMcpTimeout
+    if (inheritedIndexTimeout === undefined) delete process.env["SKALD_INDEX_TIMEOUT_MS"]
+    else process.env["SKALD_INDEX_TIMEOUT_MS"] = inheritedIndexTimeout
+  }
 })
 
 test("uses an immutable managed engine release by default", async () => {

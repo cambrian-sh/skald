@@ -22,6 +22,7 @@ const PROJECT_ENGINE_PATHS = [
 const DEFAULT_MCP_TIMEOUT_MS = 15_000
 const MIN_MCP_TIMEOUT_MS = 100
 const MAX_MCP_TIMEOUT_MS = 10 * 60_000
+const DEFAULT_INDEX_MCP_TIMEOUT_MS = MAX_MCP_TIMEOUT_MS
 const MCP_TERM_GRACE_MS = 250
 const MCP_CLEANUP_TIMEOUT_MS = 250
 const MAX_MCP_MESSAGE_CHARS = 1_000_000
@@ -252,10 +253,22 @@ export async function prepareMcpServer(
   return preparedServer
 }
 
-function mcpTimeoutMs(): number {
-  const configured = Number.parseInt(process.env["SKALD_MCP_TIMEOUT_MS"] ?? "", 10)
-  if (!Number.isFinite(configured)) return DEFAULT_MCP_TIMEOUT_MS
+function configuredTimeoutMs(name: string): number | undefined {
+  const configured = Number.parseInt(process.env[name] ?? "", 10)
+  if (!Number.isFinite(configured)) return undefined
   return Math.max(MIN_MCP_TIMEOUT_MS, Math.min(MAX_MCP_TIMEOUT_MS, configured))
+}
+
+function mcpTimeoutMs(): number {
+  return configuredTimeoutMs("SKALD_MCP_TIMEOUT_MS") ?? DEFAULT_MCP_TIMEOUT_MS
+}
+
+function indexMcpTimeoutMs(): number {
+  return (
+    configuredTimeoutMs("SKALD_INDEX_TIMEOUT_MS") ??
+    configuredTimeoutMs("SKALD_MCP_TIMEOUT_MS") ??
+    DEFAULT_INDEX_MCP_TIMEOUT_MS
+  )
 }
 
 class McpTimeoutError extends Error {
@@ -641,8 +654,14 @@ export async function runMcpTool(
   server: McpServerDefinition,
   tool: string,
   argumentsValue: Readonly<Record<string, unknown>> = {},
+  options: McpSessionOptions = {},
 ): Promise<EngineCliResult> {
-  const results = await runMcpTools(projectRoot, server, [{ tool, arguments: argumentsValue }])
+  const results = await runMcpTools(
+    projectRoot,
+    server,
+    [{ tool, arguments: argumentsValue }],
+    options,
+  )
   const result = results[0]
   if (result !== undefined) return result
   return {
@@ -666,10 +685,15 @@ export type McpSessionRequest =
       readonly params?: unknown
     }
 
+export type McpSessionOptions = {
+  readonly timeoutMs?: number
+}
+
 export async function runMcpSession(
   projectRoot: string,
   server: McpServerDefinition,
   requests: readonly McpSessionRequest[],
+  options: McpSessionOptions = {},
 ): Promise<readonly EngineCliResult[]> {
   if (requests.length === 0) return []
   let child: ReturnType<typeof Bun.spawn> | undefined
@@ -704,7 +728,10 @@ export async function runMcpSession(
     if (typeof child.stderr === "object" && child.stderr !== null) {
       stderrPromise = readBoundedStream(child.stderr, MAX_MCP_STDERR_CHARS)
     }
-    const timeoutMs = mcpTimeoutMs()
+    const timeoutMs =
+      options.timeoutMs === undefined
+        ? mcpTimeoutMs()
+        : Math.max(MIN_MCP_TIMEOUT_MS, Math.min(MAX_MCP_TIMEOUT_MS, options.timeoutMs))
     const nextResponse = createMcpResponseReader(stdout)
     await sendMcpMessage(stdin, {
       jsonrpc: "2.0",
@@ -780,11 +807,13 @@ export async function runMcpTools(
   projectRoot: string,
   server: McpServerDefinition,
   requests: readonly McpToolRequest[],
+  options: McpSessionOptions = {},
 ): Promise<readonly EngineCliResult[]> {
   return runMcpSession(
     projectRoot,
     server,
     requests.map((request) => ({ kind: "tool" as const, ...request })),
+    options,
   )
 }
 
@@ -1135,7 +1164,13 @@ export async function indexProjectDetailed(
   server: McpServerDefinition,
   mode: EngineIndexMode,
 ): Promise<EngineCliResult> {
-  return runMcpTool(projectRoot, server, "index_repository", { repo_path: projectRoot, mode })
+  return runMcpTool(
+    projectRoot,
+    server,
+    "index_repository",
+    { repo_path: projectRoot, mode },
+    { timeoutMs: indexMcpTimeoutMs() },
+  )
 }
 
 export async function indexProject(

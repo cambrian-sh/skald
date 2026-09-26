@@ -149,6 +149,16 @@ export async function prepareContextRuntime(
       },
     }
   }
+  if (compiled && currentServer !== undefined) {
+    return {
+      runtime: {
+        path: CONTEXT_RUNTIME_BINARY_PATH,
+        action: binaryExists ? "exists" : "unavailable",
+        server: binaryContextServer(projectRoot),
+      },
+      binarySource: currentServer.command,
+    }
+  }
   let bundleError: string | undefined
   try {
     const contents = await bundledContextRuntime()
@@ -164,21 +174,6 @@ export async function prepareContextRuntime(
     }
   } catch (error) {
     bundleError = error instanceof Error ? error.message : String(error)
-  }
-  if (compiled && currentServer !== undefined) {
-    return {
-      runtime: {
-        path: CONTEXT_RUNTIME_BINARY_PATH,
-        action: binaryExists ? "exists" : "unavailable",
-        server: binaryContextServer(projectRoot),
-        ...(binaryExists || bundleError === undefined
-          ? {}
-          : {
-              note: `Project-local bundling is unavailable; copying the standalone executable: ${bundleError}`,
-            }),
-      },
-      ...(binaryExists ? {} : { binarySource: currentServer.command }),
-    }
   }
   if (existing.exists) {
     return {

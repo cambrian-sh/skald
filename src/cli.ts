@@ -2,7 +2,7 @@
 
 import { runAgentInstall, runAgentList } from "./cli/agents"
 import { runBackendCommand } from "./cli/backend"
-import { helpText, parseCommand } from "./cli/command"
+import { helpText, type InitCommand, parseCommand, type SetupCommand } from "./cli/command"
 import {
   runContextCommand,
   runDoctorCommand,
@@ -16,7 +16,8 @@ import { runEngineCommand } from "./cli/engine"
 import { runClaudeSessionStartHook } from "./cli/hooks"
 import { runInit } from "./cli/init"
 import { runSetupCommand } from "./cli/setup"
-import { ProjectNotFoundError } from "./project/discover"
+import { discoverProject, ProjectNotFoundError } from "./project/discover"
+import { ensureSkaldGitignore } from "./project/gitignore"
 import { SKALD_VERSION } from "./version"
 
 export async function runCli(args: readonly string[]): Promise<number> {
@@ -35,9 +36,8 @@ export async function runCli(args: readonly string[]): Promise<number> {
     case "backend":
       return runBackendCommand(command.root)
     case "init":
-      return runInit(command)
     case "setup":
-      return runSetupCommand(command)
+      return runProjectInitialization(command)
     case "hook-claude-session-start":
       return runClaudeSessionStartHook()
     case "serve":
@@ -70,6 +70,24 @@ export async function runCli(args: readonly string[]): Promise<number> {
     default:
       return assertNever(command)
   }
+}
+
+async function runProjectInitialization(command: InitCommand | SetupCommand): Promise<number> {
+  const projectRoot = (await discoverProject(command.root ?? process.cwd())).root
+  await ensureSkaldGitignore(projectRoot, true)
+  let result: number
+  switch (command.kind) {
+    case "init":
+      result = await runInit(command)
+      break
+    case "setup":
+      result = await runSetupCommand(command)
+      break
+    default:
+      return assertNever(command)
+  }
+  if (result === 0 && !command.dryRun) await ensureSkaldGitignore(projectRoot, false)
+  return result
 }
 
 function assertNever(value: never): never {

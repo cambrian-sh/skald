@@ -62,6 +62,43 @@ test("does not claim freshness when the indexed engine changes", () => {
   ).toMatchObject({ status: "unknown" })
 })
 
+test("classifies an oversized Git status as dirty instead of unknown", async () => {
+  const root = await mkdtemp(join(tmpdir(), "skald-project-state-large-status-"))
+  try {
+    const git = (args: readonly string[]) =>
+      Bun.spawnSync(["git", "-C", root, ...args], {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: "Skald Test",
+          GIT_AUTHOR_EMAIL: "skald-test@example.invalid",
+          GIT_COMMITTER_NAME: "Skald Test",
+          GIT_COMMITTER_EMAIL: "skald-test@example.invalid",
+        },
+      })
+    expect(git(["init", "-q"]).exitCode).toBe(0)
+    await writeFile(join(root, "tracked.txt"), "tracked\n")
+    expect(git(["add", "tracked.txt"]).exitCode).toBe(0)
+    expect(git(["commit", "-qm", "initial"]).exitCode).toBe(0)
+    await Promise.all(
+      Array.from({ length: 400 }, (_, index) =>
+        writeFile(
+          join(root, `untracked-${"x".repeat(180)}-${String(index).padStart(4, "0")}`),
+          "x\n",
+        ),
+      ),
+    )
+
+    await expect(currentGitSnapshot(root)).resolves.toMatchObject({
+      revision: expect.any(String),
+      workingTree: "dirty",
+    })
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
+
 test("does not classify Skald-managed client files as project changes", async () => {
   const root = await mkdtemp(join(tmpdir(), "skald-project-state-managed-files-"))
   try {

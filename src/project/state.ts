@@ -11,6 +11,17 @@ const PROJECT_STATE_VERSION = 1 as const
 const GIT_OUTPUT_LIMIT = 64 * 1024
 const GIT_TIMEOUT_MS = 2_000
 const MAX_INDEX_RUNS = 20
+const GIT_SCOPED_PATHS = [
+  ".",
+  ":(exclude).skald/**",
+  ":(exclude).mcp.json",
+  ":(exclude)opencode.json",
+  ":(exclude)opencode.jsonc",
+  ":(exclude).opencode/**",
+  ":(exclude).claude/.mcp.json",
+  ":(exclude).claude/settings.json",
+  ":(exclude).codex/**",
+] as const
 
 export type ProjectGitSnapshot = {
   readonly revision: string | undefined
@@ -72,6 +83,7 @@ type ProcessResult = {
   readonly exitCode: number
   readonly output: string
   readonly truncated: boolean
+  readonly timedOut: boolean
 }
 
 function safeGitEnvironment(): Record<string, string> {
@@ -169,41 +181,37 @@ async function runGit(projectRoot: string, args: readonly string[]): Promise<Pro
     }
     await Promise.race([child.exited, waitMs(100)])
     await outputPromise.catch(() => undefined)
-    return { exitCode: 1, output: "", truncated: true }
+    return { exitCode: 1, output: "", truncated: false, timedOut: true }
   }
-  return result
+  return { ...result, timedOut: false }
+}
+
+async function gitWorkingTree(projectRoot: string): Promise<ProjectGitSnapshot["workingTree"]> {
+  const [trackedResult, untrackedResult] = await Promise.all([
+    runGit(projectRoot, ["diff", "--quiet", "HEAD", "--", ...GIT_SCOPED_PATHS]),
+    runGit(projectRoot, ["ls-files", "--others", "--exclude-standard", "--", ...GIT_SCOPED_PATHS]),
+  ])
+  const trackedDirty = trackedResult.exitCode === 1 && !trackedResult.timedOut
+  const trackedUnknown = trackedResult.timedOut || (trackedResult.exitCode !== 0 && !trackedDirty)
+  const untrackedDirty =
+    untrackedResult.exitCode === 0 &&
+    (untrackedResult.truncated || untrackedResult.output.trim().length > 0)
+  const untrackedUnknown = untrackedResult.timedOut || untrackedResult.exitCode !== 0
+  if (trackedDirty || untrackedDirty) return "dirty"
+  if (trackedUnknown || untrackedUnknown) return "unknown"
+  return "clean"
 }
 
 export async function currentGitSnapshot(projectRoot: string): Promise<ProjectGitSnapshot> {
-  const [revisionResult, statusResult] = await Promise.all([
+  const [revisionResult, workingTree] = await Promise.all([
     runGit(projectRoot, ["rev-parse", "--verify", "HEAD"]),
-    runGit(projectRoot, [
-      "status",
-      "--porcelain=v1",
-      "--untracked-files=all",
-      "--",
-      ".",
-      ":(exclude).skald/**",
-      ":(exclude).mcp.json",
-      ":(exclude)opencode.json",
-      ":(exclude)opencode.jsonc",
-      ":(exclude).opencode/**",
-      ":(exclude).claude/.mcp.json",
-      ":(exclude).claude/settings.json",
-      ":(exclude).codex/**",
-    ]),
+    gitWorkingTree(projectRoot),
   ])
   const revision =
     revisionResult.exitCode === 0 && !revisionResult.truncated
       ? revisionResult.output.trim() || undefined
       : undefined
-  const workingTree =
-    statusResult.exitCode !== 0 || statusResult.truncated
-      ? "unknown"
-      : statusResult.output.trim().length === 0
-        ? "clean"
-        : "dirty"
-  if (revision !== undefined || statusResult.exitCode === 0) {
+  if (revision !== undefined || workingTree !== "unknown") {
     const name = projectRoot.split(/[\\/]/).pop()?.toLowerCase()
     const repositoryRevisions =
       revision === undefined || name === undefined
@@ -243,34 +251,14 @@ async function workspaceSnapshot(projectRoot: string): Promise<ProjectGitSnapsho
   repositories.sort((left, right) => left.localeCompare(right))
   const snapshots = await Promise.all(
     repositories.map(async (repository) => {
-      const [revisionResult, statusResult] = await Promise.all([
+      const [revisionResult, workingTree] = await Promise.all([
         runGit(repository, ["rev-parse", "--verify", "HEAD"]),
-        runGit(repository, [
-          "status",
-          "--porcelain=v1",
-          "--untracked-files=all",
-          "--",
-          ".",
-          ":(exclude).skald/**",
-          ":(exclude).mcp.json",
-          ":(exclude)opencode.json",
-          ":(exclude)opencode.jsonc",
-          ":(exclude).opencode/**",
-          ":(exclude).claude/.mcp.json",
-          ":(exclude).claude/settings.json",
-          ":(exclude).codex/**",
-        ]),
+        gitWorkingTree(repository),
       ])
       const revision =
         revisionResult.exitCode === 0 && !revisionResult.truncated
           ? revisionResult.output.trim() || undefined
           : undefined
-      const workingTree =
-        statusResult.exitCode !== 0 || statusResult.truncated
-          ? "unknown"
-          : statusResult.output.trim().length === 0
-            ? "clean"
-            : "dirty"
       return {
         path: relative(projectRoot, repository).replaceAll("\\", "/"),
         revision,
