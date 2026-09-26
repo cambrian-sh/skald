@@ -21,7 +21,10 @@ bun run check
 
 `bun run check` runs TypeScript checking, Biome, and the isolated test suite.
 CI runs it on Linux and macOS. The Linux CI job also builds the pinned Afşin
-engine, stages it, and verifies the standalone Skald build.
+engine, stages it, and verifies the standalone Skald build. The source-only
+suite checks that setup fails without project writes when no engine is
+available; the Cambrian setup acceptance test is then run against the compiled
+standalone CLI with the staged engine.
 
 ## Local standalone build
 

@@ -38,3 +38,11 @@ jobs:
             --arch amd64
       - run: bun run build
         if: matrix.os == 'ubuntu-latest'
+      - name: Verify standalone setup adopts the Afşin engine and Cambrian knowledge
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          SKALD_TEST_STANDALONE_CLI: ${{ github.workspace }}/dist/skald
+        run: >-
+          bun test --isolate
+          --test-name-pattern "preserves Cambrian knowledge when setup replaces an existing absolute engine"
+          test/cli.test.ts

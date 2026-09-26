@@ -3,8 +3,13 @@ import { existsSync } from "node:fs"
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { locateProjectEngineSource } from "../src/engine/project"
 
 let fixtureRoot: string | undefined
+const standaloneCli = process.env["SKALD_TEST_STANDALONE_CLI"]?.trim()
+const hasManagedSetupEngine =
+  (await locateProjectEngineSource(resolve(import.meta.dir, ".."))) !== undefined ||
+  (standaloneCli !== undefined && standaloneCli.length > 0)
 const originalTrustDirectory = process.env["SKALD_TRUST_DIRECTORY"]
 const testTrustDirectory = join(tmpdir(), `skald-cli-trust-${process.pid}`)
 process.env["SKALD_TRUST_DIRECTORY"] = testTrustDirectory
@@ -392,60 +397,87 @@ test("reuses the existing Cambrian Claude engine for other agent configs", async
   })
 })
 
-test("preserves Cambrian knowledge when setup replaces an existing absolute engine", async () => {
-  fixtureRoot = await mkdtemp(join(tmpdir(), "skald-cli-cambrian-setup-"))
-  await mkdir(join(fixtureRoot, ".git"))
-  await mkdir(join(fixtureRoot, ".claude"))
-  const knowledgeDirectory = join(fixtureRoot, "canonical-knowledge")
-  await mkdir(knowledgeDirectory)
-  await writeFile(
-    join(fixtureRoot, ".claude", ".mcp.json"),
-    JSON.stringify(
-      {
-        mcpServers: {
-          "codebase-memory-mcp": {
-            command:
-              "/home/doruk/Code/cambrian/codebase-memory-mcp/build/c-afsin/codebase-memory-mcp",
-            env: { CBM_KNOWLEDGE_DIR: knowledgeDirectory },
+test.skipIf(hasManagedSetupEngine)(
+  "refuses setup without the Afşin engine before changing project files",
+  async () => {
+    fixtureRoot = await mkdtemp(join(tmpdir(), "skald-cli-setup-no-engine-"))
+    await mkdir(join(fixtureRoot, ".git"))
+
+    const result = Bun.spawnSync(
+      [
+        "bun",
+        "run",
+        "src/cli.ts",
+        "setup",
+        "--no-index",
+        "--agents",
+        "claude",
+        "--json",
+        "--root",
+        fixtureRoot,
+      ],
+      { cwd: resolve(import.meta.dir, ".."), env: testEnvironment() },
+    )
+
+    expect(result.exitCode).toBe(1)
+    expect(new TextDecoder().decode(result.stderr)).toContain(
+      "The Skald release does not contain the Afşin engine",
+    )
+    expect(existsSync(join(fixtureRoot, ".skald"))).toBe(false)
+    expect(existsSync(join(fixtureRoot, ".mcp.json"))).toBe(false)
+  },
+)
+
+test.skipIf(!hasManagedSetupEngine)(
+  "preserves Cambrian knowledge when setup replaces an existing absolute engine",
+  async () => {
+    fixtureRoot = await mkdtemp(join(tmpdir(), "skald-cli-cambrian-setup-"))
+    await mkdir(join(fixtureRoot, ".git"))
+    await mkdir(join(fixtureRoot, ".claude"))
+    const knowledgeDirectory = join(fixtureRoot, "canonical-knowledge")
+    await mkdir(knowledgeDirectory)
+    await writeFile(
+      join(fixtureRoot, ".claude", ".mcp.json"),
+      JSON.stringify(
+        {
+          mcpServers: {
+            "codebase-memory-mcp": {
+              command:
+                "/home/doruk/Code/cambrian/codebase-memory-mcp/build/c-afsin/codebase-memory-mcp",
+              env: { CBM_KNOWLEDGE_DIR: knowledgeDirectory },
+            },
           },
         },
-      },
-      null,
-      2,
-    ),
-  )
+        null,
+        2,
+      ),
+    )
 
-  const result = Bun.spawnSync(
-    [
-      "bun",
-      "run",
-      "src/cli.ts",
-      "setup",
-      "--no-index",
-      "--agents",
-      "claude",
-      "--json",
-      "--root",
-      fixtureRoot,
-    ],
-    { cwd: resolve(import.meta.dir, ".."), env: testEnvironment() },
-  )
+    const invocation =
+      standaloneCli === undefined || standaloneCli.length === 0
+        ? ["bun", "run", "src/cli.ts"]
+        : [standaloneCli]
+    const result = Bun.spawnSync(
+      [...invocation, "setup", "--no-index", "--agents", "claude", "--json", "--root", fixtureRoot],
+      { cwd: resolve(import.meta.dir, ".."), env: testEnvironment() },
+    )
 
-  expect(result.exitCode).toBe(0)
-  const manifest = JSON.parse(
-    await readFile(join(fixtureRoot, ".skald", "config.json"), "utf8"),
-  ) as {
-    backend: { command: string; env?: Record<string, string> }
-    sources: { kind: string; path: string }[]
-  }
-  expect(manifest.backend.command).toBe(
-    join(fixtureRoot, ".skald", "engine", "codebase-memory-mcp"),
-  )
-  expect(manifest.backend.env?.["CBM_KNOWLEDGE_DIR"]).toBe(knowledgeDirectory)
-  expect(manifest.sources.find((source) => source.kind === "knowledge")?.path).toBe(
-    knowledgeDirectory,
-  )
-})
+    expect(result.exitCode).toBe(0)
+    const manifest = JSON.parse(
+      await readFile(join(fixtureRoot, ".skald", "config.json"), "utf8"),
+    ) as {
+      backend: { command: string; env?: Record<string, string> }
+      sources: { kind: string; path: string }[]
+    }
+    expect(manifest.backend.command).toBe(
+      join(fixtureRoot, ".skald", "engine", "codebase-memory-mcp"),
+    )
+    expect(manifest.backend.env?.["CBM_KNOWLEDGE_DIR"]).toBe(knowledgeDirectory)
+    expect(manifest.sources.find((source) => source.kind === "knowledge")?.path).toBe(
+      knowledgeDirectory,
+    )
+  },
+)
 
 test("locates and indexes the configured MCP engine", async () => {
   fixtureRoot = await mkdtemp(join(tmpdir(), "skald-cli-engine-"))
