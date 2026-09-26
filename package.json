@@ -2,6 +2,10 @@
   "name": "@cambrian/skald",
   "version": "0.1.0",
   "description": "Project context and memory setup for coding agents",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambrian-sh/skald.git"
+  },
   "license": "MIT",
   "keywords": [
     "coding-agent",
@@ -19,6 +23,12 @@
   },
   "files": [
     "README.md",
+    "ARCHITECTURE.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "product.md",
+    "RELEASING.md",
+    "SECURITY.md",
     "src",
     "vendor/engine"
   ],
@@ -29,6 +39,7 @@
     "dev": "bun run src/cli.ts",
     "prepublishOnly": "bun run check && bun run build && bun run scripts/release-publish-guard.ts",
     "package:release": "bun run scripts/package-release.ts",
+    "package:release:root": "bun run scripts/package-release-root.ts",
     "stage:engine": "bun run scripts/stage-engine.ts",
     "test": "bun test --isolate",
     "typecheck": "tsc --noEmit",

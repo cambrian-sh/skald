@@ -1,15 +1,51 @@
 name: Release assets
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: read
-  id-token: write
-  attestations: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Validate release tag and source branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          version="$(bun -e 'const metadata = await Bun.file("package.json").json(); console.log(metadata.version)')"
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Only stable semantic-version tags are releasable" >&2
+            exit 1
+          }
+          test "$GITHUB_REF_NAME" = "v$version" || {
+            echo "Tag $GITHUB_REF_NAME does not match package version $version" >&2
+            exit 1
+          }
+          git fetch origin "$DEFAULT_BRANCH"
+          git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || {
+            echo "Release tags must point to a commit on $DEFAULT_BRANCH" >&2
+            exit 1
+          }
+      - run: bun run typecheck
+      - run: bun run lint
+
   build:
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -32,8 +68,8 @@ jobs:
             build_arch: x86_64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           repository: afsin-asf/codebase-memory-mcp
           ref: cf1d310a72320ec55e7b86a091561162567e55d2
@@ -59,26 +95,256 @@ jobs:
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}"
       - run: bun run build
-      - name: Package the matching native engine
+      - name: Verify standalone executable
+        run: ./dist/skald --version
+      - name: Exercise standalone setup and embedded engine
+        run: |
+          project="$(mktemp -d "$RUNNER_TEMP/skald-standalone.XXXXXX")"
+          git init --quiet "$project"
+          printf '# Skald standalone smoke\n' > "$project/README.md"
+          git -C "$project" config user.name "Skald Release Smoke"
+          git -C "$project" config user.email "skald-release-smoke@example.invalid"
+          git -C "$project" add README.md
+          git -C "$project" commit --quiet -m "Add standalone smoke fixture"
+          ./dist/skald setup \
+            --root "$project" \
+            --no-index \
+            --agents claude,opencode \
+            --json
+          ./dist/skald engine conformance --root "$project" --json
+      - name: Package this platform's engine companion
         run: |
           bun run package:release -- \
             --binary "vendor/engine/${{ matrix.platform }}-${{ matrix.arch }}/codebase-memory-mcp" \
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
             --output .release/packages
-      - run: ./dist/skald --version
+      - name: Prepare uniquely named release assets
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          version="$(bun -e 'const metadata = await Bun.file("package.json").json(); console.log(metadata.version)')"
+          target="$PLATFORM-$ARCH"
+          mkdir -p .release/upload
+          cp dist/skald ".release/upload/skald-$target"
+          (cd .release/upload && shasum -a 256 "skald-$target" > "skald-$target.sha256")
+          cp ".release/packages/engine-$target/vendor/engine/manifest.json" \
+            ".release/upload/engine-manifest-$target.json"
+          archive="$(find .release/packages -maxdepth 1 -type f -name "*skald-engine-$target-$version.tgz" -print -quit)"
+          test -n "$archive" || {
+            echo "Missing packed engine companion for $target" >&2
+            exit 1
+          }
+          cp "$archive" .release/upload/
       - uses: actions/upload-artifact@v4
         with:
           name: skald-${{ matrix.platform }}-${{ matrix.arch }}
-          path: |
-            dist/skald
-            dist/skald.sha256
-            vendor/engine/manifest.json
-            vendor/engine/AFSIN-LICENSE
-            .release/packages/*.tgz
-      - name: Attest release artifacts
-        uses: actions/attest-build-provenance@v2
+          path: .release/upload/*
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    needs: [preflight, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
         with:
-          subject-path: |
-            dist/skald
-            .release/packages/*.tgz
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: skald-*
+          path: .release/downloaded
+          merge-multiple: false
+      - name: Assemble and validate one complete cross-platform release
+        run: |
+          version="$(bun -e 'const metadata = await Bun.file("package.json").json(); console.log(metadata.version)')"
+          targets=(linux-amd64 linux-arm64 darwin-arm64 darwin-amd64)
+          manifests=()
+          for target in "${targets[@]}"; do
+            artifact=".release/downloaded/skald-$target"
+            test -s "$artifact/skald-$target"
+            test -s "$artifact/skald-$target.sha256"
+            (cd "$artifact" && shasum -a 256 -c "skald-$target.sha256")
+            manifest="$artifact/engine-manifest-$target.json"
+            test -s "$manifest"
+            manifests+=("$manifest")
+          done
+          mkdir -p .release/root-package .release/assets
+          jq --slurp --exit-status '
+            if length != 4 then error("expected four platform manifests")
+            else
+              .[0].engine as $engine
+              | ([.[].assets[]]) as $assets
+              | ($assets | group_by(.path)) as $groups
+              | if any(.[]; .schemaVersion != 1 or .engine != $engine) then
+                  error("engine identity differs across platform manifests")
+                elif any($groups[]; (map({path,platform,arch,sha256,bytes} | tojson) | unique | length) != 1) then
+                  error("conflicting digests for the same engine asset")
+                else
+                  {schemaVersion: 1, engine: $engine, assets: ($groups | map(.[0]) | sort_by(.path))}
+                end
+            end
+          ' "${manifests[@]}" > .release/engine-manifest.json
+          bun run package:release:root -- \
+            --manifest .release/engine-manifest.json \
+            --output .release/root-package
+          root_package="$(find .release/root-package -maxdepth 1 -type f -name "cambrian-skald-$version.tgz" -print -quit)"
+          test -n "$root_package" || {
+            echo "Missing universal Skald package archive" >&2
+            exit 1
+          }
+          cp "$root_package" .release/assets/
+          cp .release/engine-manifest.json .release/assets/skald-engine-manifest.json
+          cp LICENSE .release/assets/SKALD-LICENSE
+          cp vendor/engine/AFSIN-LICENSE .release/assets/AFSIN-LICENSE
+          for target in "${targets[@]}"; do
+            artifact=".release/downloaded/skald-$target"
+            cp "$artifact/skald-$target" "$artifact/skald-$target.sha256" .release/assets/
+            archive="$(find "$artifact" -maxdepth 1 -type f -name "*skald-engine-$target-$version.tgz" -print -quit)"
+            test -n "$archive" || {
+              echo "Missing packed engine companion for $target" >&2
+              exit 1
+            }
+            cp "$archive" .release/assets/
+          done
+          (cd .release/assets && shasum -a 256 * > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skald-release-${{ github.ref_name }}
+          path: .release/assets/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Attest release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: .release/assets/*
+
+  publish:
+    needs: [preflight, assemble]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: skald-release-${{ github.ref_name }}
+          path: .release/assets
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global npm@11.15.0
+      - name: Publish engine companions, then the Skald CLI
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          publish_if_needed() {
+            archive="$1"
+            package="$2"
+            expected="sha512-$(openssl dgst -sha512 -binary "$archive" | openssl base64 -A)"
+            published="$(npm view "$package@$version" dist.integrity 2>/dev/null || true)"
+            if [ -n "$published" ]; then
+              test "$published" = "$expected" || {
+                echo "$package@$version is already published with different contents" >&2
+                return 1
+              }
+              echo "$package@$version already matches this release; skipping"
+            else
+              npm publish "$archive" --access public
+            fi
+          }
+          for target in linux-amd64 linux-arm64 darwin-arm64 darwin-amd64; do
+            archive="$(find .release/assets -maxdepth 1 -type f -name "*skald-engine-$target-$version.tgz" -print -quit)"
+            test -n "$archive"
+            publish_if_needed "$archive" "@cambrian/skald-engine-$target"
+          done
+          root_package=".release/assets/cambrian-skald-$version.tgz"
+          test -s "$root_package"
+          publish_if_needed "$root_package" "@cambrian/skald"
+
+  consumer-smoke:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+          - os: macos-15-intel
+            platform: darwin
+            arch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Install and exercise the published consumer package
+        env:
+          SKALD_VERSION: ${{ github.ref_name }}
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          version="${SKALD_VERSION#v}"
+          project="$(mktemp -d "$RUNNER_TEMP/skald-consumer.XXXXXX")"
+          git init --quiet "$project"
+          printf '# Skald release smoke\n\nTarget: %s/%s\n' "$PLATFORM" "$ARCH" > "$project/README.md"
+          git -C "$project" config user.name "Skald Release Smoke"
+          git -C "$project" config user.email "skald-release-smoke@example.invalid"
+          git -C "$project" add README.md
+          git -C "$project" commit --quiet -m "Add release smoke fixture"
+          bunx --bun "@cambrian/skald@$version" --version
+          bunx --bun "@cambrian/skald@$version" setup \
+            --root "$project" \
+            --agents claude,opencode \
+            --json
+          bunx --bun "@cambrian/skald@$version" engine conformance \
+            --root "$project" \
+            --json
+          bunx --bun "@cambrian/skald@$version" context \
+            --root "$project" \
+            --query "Skald release smoke" \
+            --json
+
+  github-release:
+    needs: [preflight, consumer-smoke]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: skald-release-${{ github.ref_name }}
+          path: .release/assets
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" .release/assets/* \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" .release/assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi

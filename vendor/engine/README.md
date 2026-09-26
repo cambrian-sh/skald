@@ -5,6 +5,12 @@ This directory is the release-time home for the pinned Afşin
 recorded in `manifest.json`. The redistributed engine is covered by
 `AFSIN-LICENSE`.
 
+Native executables are build artifacts, not repository files. Release CI checks
+out the pinned source, builds the runner's native target, and stages the binary
+here. `.gitignore` excludes staged executables so a local build cannot add a
+large engine blob to a commit. A fresh source checkout must stage its host
+asset before `bun run build`; see [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
 Platform assets are staged with:
 
 ```sh

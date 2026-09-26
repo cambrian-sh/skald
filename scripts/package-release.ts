@@ -2,15 +2,7 @@ import { createHash } from "node:crypto"
 import { cp, lstat, mkdir, readFile, writeFile } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import { AFSIN_ENGINE } from "../src/engine/project"
-
-const SUPPORTED_TARGETS = [
-  { platform: "linux", arch: "amd64", os: "linux", cpu: "x64" },
-  { platform: "linux", arch: "arm64", os: "linux", cpu: "arm64" },
-  { platform: "darwin", arch: "arm64", os: "darwin", cpu: "arm64" },
-  { platform: "darwin", arch: "amd64", os: "darwin", cpu: "x64" },
-] as const
-
-type SupportedTarget = (typeof SUPPORTED_TARGETS)[number]
+import { SUPPORTED_TARGETS, type SupportedTarget } from "./release-targets"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -62,7 +54,7 @@ async function assertBinary(
 async function verifyStagedAsset(
   target: SupportedTarget,
   asset: { readonly bytes: number; readonly sha256: string },
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   const parsed: unknown = JSON.parse(await readFile("vendor/engine/manifest.json", "utf8"))
   if (!isRecord(parsed) || parsed["schemaVersion"] !== 1 || !isRecord(parsed["engine"])) {
     throw new Error("Invalid staged Afşin engine manifest")
@@ -78,11 +70,17 @@ async function verifyStagedAsset(
     assets.find((candidate) => isRecord(candidate) && candidate["path"] === path)
   if (
     !isRecord(manifestAsset) ||
+    manifestAsset["platform"] !== target.platform ||
+    manifestAsset["arch"] !== target.arch ||
+    manifestAsset["path"] !== path ||
+    typeof manifestAsset["sha256"] !== "string" ||
+    !/^[a-f0-9]{64}$/.test(manifestAsset["sha256"]) ||
     manifestAsset["bytes"] !== asset.bytes ||
     manifestAsset["sha256"] !== asset.sha256
   ) {
     throw new Error(`Staged Afşin engine manifest does not match ${path}`)
   }
+  return { schemaVersion: 1, engine: parsed["engine"], assets: [manifestAsset] }
 }
 
 async function packageDirectory(path: string): Promise<void> {
@@ -105,44 +103,12 @@ async function readRootManifest(): Promise<Record<string, unknown>> {
   return parsed
 }
 
-async function writeRootPackage(
-  root: string,
-  manifest: Record<string, unknown>,
-  version: string,
-): Promise<void> {
-  const optionalDependencies: Record<string, string> = {}
-  for (const target of SUPPORTED_TARGETS) optionalDependencies[packageName(target)] = version
-  const packageManifest: Record<string, unknown> = {
-    ...manifest,
-    files: [
-      "README.md",
-      "LICENSE",
-      "src",
-      "vendor/engine/README.md",
-      "vendor/engine/AFSIN-LICENSE",
-      "vendor/engine/manifest.json",
-    ],
-    optionalDependencies,
-    scripts: undefined,
-    devDependencies: undefined,
-  }
-  delete packageManifest["scripts"]
-  delete packageManifest["devDependencies"]
-  await writeFile(join(root, "package.json"), `${JSON.stringify(packageManifest, null, 2)}\n`)
-  await cp("README.md", join(root, "README.md"))
-  await cp("LICENSE", join(root, "LICENSE"))
-  await cp("src", join(root, "src"), { recursive: true })
-  await packageDirectory(join(root, "vendor", "engine"))
-  await cp("vendor/engine/README.md", join(root, "vendor", "engine", "README.md"))
-  await cp("vendor/engine/AFSIN-LICENSE", join(root, "vendor", "engine", "AFSIN-LICENSE"))
-  await cp("vendor/engine/manifest.json", join(root, "vendor", "engine", "manifest.json"))
-}
-
 async function writeEnginePackage(
   root: string,
   target: SupportedTarget,
   binary: string,
   asset: { readonly bytes: number; readonly sha256: string },
+  manifest: Record<string, unknown>,
   version: string,
 ): Promise<void> {
   const targetPath = `${target.platform}-${target.arch}`
@@ -153,6 +119,10 @@ async function writeEnginePackage(
         name: packageName(target),
         version,
         description: `Skald's pinned Afşin structural engine for ${target.platform}/${target.arch}`,
+        repository: {
+          type: "git",
+          url: "https://github.com/cambrian-sh/skald.git",
+        },
         license: "MIT",
         os: [target.os],
         cpu: [target.cpu],
@@ -173,7 +143,10 @@ async function writeEnginePackage(
   await packageDirectory(join(root, "vendor", "engine", targetPath))
   await cp(binary, join(root, "vendor", "engine", targetPath, binaryName(target)))
   await cp("vendor/engine/AFSIN-LICENSE", join(root, "vendor", "engine", "AFSIN-LICENSE"))
-  await cp("vendor/engine/manifest.json", join(root, "vendor", "engine", "manifest.json"))
+  await writeFile(
+    join(root, "vendor", "engine", "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  )
 }
 
 async function pack(directory: string, output: string): Promise<void> {
@@ -196,21 +169,17 @@ try {
   const version = rootManifest["version"]
   if (typeof version !== "string") throw new Error("Root package version is invalid")
   const asset = await assertBinary(binary)
-  await verifyStagedAsset(target, asset)
+  const manifest = await verifyStagedAsset(target, asset)
   await packageDirectory(output)
-  const rootPackage = join(output, "root")
   const enginePackage = join(output, `engine-${target.platform}-${target.arch}`)
-  await packageDirectory(rootPackage)
   await packageDirectory(enginePackage)
-  await writeRootPackage(rootPackage, rootManifest, version)
-  await writeEnginePackage(enginePackage, target, binary, asset, version)
-  await pack(rootPackage, output)
+  await writeEnginePackage(enginePackage, target, binary, asset, manifest, version)
   await pack(enginePackage, output)
   console.log(
     JSON.stringify({
       status: "packed",
       target: `${target.platform}-${target.arch}`,
-      packages: [packageName(target), rootManifest["name"]],
+      packages: [packageName(target)],
       engine: asset,
     }),
   )

@@ -6,3 +6,5 @@ coverage/
 .codebase-memory/
 .omo/
 .release/
+# Native Afşin binaries are built from the pinned source during release jobs.
+/vendor/engine/*/codebase-memory-mcp*
