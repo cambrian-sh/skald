@@ -53,7 +53,7 @@ official path.
 | Standards discovery | Agent installer surfaces and generated instruction profiles | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, Copilot instructions, Cursor rules, `.skills`, and common skill roots | Good portable baseline; instruction generation remains opt-in/future |
 | Retrieval | Rich structural, semantic, cross-repository and graph queries | `project_context` combines instructions, skills, knowledge, and capability-selected backend graph/search results with path and character budgets | Useful default context surface; advanced queries remain available on backend MCP |
 | Safety | Native engine scope, process, and cache controls | Descriptor-safe managed paths on the official Linux/macOS targets, no-follow symlinks, atomic writes, bounded discovery/input, MCP deadlines, user-scoped command/argument/digest trust, private Afşin runtime rendezvous, external-knowledge approval, and generated `.skald/.gitignore` | Strong local setup boundary; `.gitignore` prevents accidental new additions but is not access control and does not remove already tracked files |
-| Distribution | Native binary, daemon, graph UI, installer/update path | Standalone Bun builds embed the pinned Afşin asset; release packaging generates one universal `@cambrian/skald` package with four matching platform companions; `setup` installs into project-local `.skald/engine/`, verifies the complete contract, and records its digest | Linux amd64 source/package-consumer paths are proven locally; the public GitHub repo is empty, npm returns 404, and the four native release jobs have not run |
+| Distribution | Native binary, daemon, graph UI, installer/update path | Standalone Bun builds embed the pinned Afşin asset; release packaging generates one universal `@cambrian/skald` package with four matching platform companions; `setup` installs into project-local `.skald/engine/`, verifies the complete contract, and records its digest | The public Linux/macOS CI check matrix and Linux standalone smoke pass; npm bootstrap and the four-target tagged release/consumer matrix remain unverified |
 
 ## What was wrong and is fixed
 
@@ -274,8 +274,8 @@ The implementation review found and fixed these release-blocking issues:
     first-party Node-API adapter around `openat`/`fstatat`/`linkat`/`renameat`/
     `unlinkat`, while bounded streaming and atomic-publication policy remain in
     TypeScript. Child-process cleanup now uses a tested POSIX process-group
-    signal helper. Linux behavior is covered by the full public API security
-    tests; macOS remains unverified until the updated CI job runs.
+    signal helper. The push-triggered CI run on `d17cee6` passed on both Ubuntu
+    and macOS; the separate four-target release/consumer workflow remains unrun.
 54. The filesystem helper was initially implemented but not included in release
     artifacts. Standalone builds now embed it; each existing OS/CPU engine
     companion packages its matching helper; the universal root package does not
@@ -288,6 +288,11 @@ The implementation review found and fixed these release-blocking issues:
     by Skald's project-runtime code. The rebuilt Linux binary completed setup,
     Afşin contract conformance, and context retrieval; the context was expected
     to report an unknown index because this setup smoke used `--no-index`.
+
+56. The macOS CI check exposed Linux/amd64 assumptions in the release-package
+    test fixture: its native-addon directory, manifest asset, and staged binary
+    did not follow the host target. The fixture now derives all three from the
+    target being packaged. The final push-triggered Ubuntu/macOS CI run passed.
 
 ## Original vision coverage
 
@@ -315,7 +320,8 @@ multi-platform release has executed. Remaining blockers include distribution
 integrity and release evidence:
 
 - the public [GitHub repository](https://github.com/cambrian-sh/skald) now has
-  the clean `master` baseline at `c6b350aa1b73f814216443855d21818814bf853e`.
+  the clean `master` baseline at
+  `d17cee6763e7ea648fc02f529408f739bc89d704`.
   The branch contains no blob over 100 MB. Pre-rewrite history, including the
   294,355,704-byte engine blob, remains only in local backup refs and was not
   pushed;
@@ -352,8 +358,10 @@ the official engine.
 
 ## Release conclusion
 
-The 2026-09-27 Linux source check passes 120 tests with one intentional
-standalone-only skip and no failures. The rebuilt standalone CLI passed
+The 2026-09-27 push-triggered [CI run](https://github.com/cambrian-sh/skald/actions/runs/36335180992)
+on `d17cee6` completed successfully on Ubuntu and macOS. A fresh local Linux
+`bun run check` passed 121 tests with one intentional standalone-only skip and
+no failures. The rebuilt standalone CLI passed
 `--help`, `--version`, rejected an unknown command with exit 2, completed
 project setup, passed all 16 Afşin tool/schema conformance checks, and served a
 context response. A real platform companion archive contained both its Afşin
@@ -366,8 +374,9 @@ evidence.
 This is not yet production-distributable to other developers. The pushed
 `master` baseline is free of the historical 294 MB blob, but the public npm
 package has not been bootstrapped and trusted publishers are not configured.
-The updated macOS CI and four-target release/consumer matrix have not run; only
-Linux amd64 has fresh evidence for the new native helper and packaging path.
+The Linux/macOS CI check matrix is green, but the four-target tagged
+release/consumer matrix has not run; only Linux amd64 has fresh evidence from
+the complete native release consumer path.
 The supported matrix remains Linux/macOS, not Windows/BSD. Do not describe
 Skald as released or universally validated until native CI and release gates
 have evidence.
