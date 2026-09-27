@@ -33,22 +33,25 @@
     "vendor/engine"
   ],
   "scripts": {
-    "build": "bun run scripts/build.ts",
+    "build": "bun run native:build && bun run scripts/build.ts",
     "benchmark": "bun test --isolate test/context-quality.test.ts",
     "check": "bun run typecheck && bun run lint && bun run test",
-    "dev": "bun run src/cli.ts",
+    "dev": "bun run native:build && bun run src/cli.ts",
     "prepublishOnly": "bun run check && bun run build && bun run scripts/release-publish-guard.ts",
     "package:release": "bun run scripts/package-release.ts",
     "package:release:root": "bun run scripts/package-release-root.ts",
     "stage:engine": "bun run scripts/stage-engine.ts",
-    "test": "bun test --isolate",
+    "test": "bun run native:build && bun test --isolate",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "extract:engine-source": "bun run scripts/extract-afsin-source.ts",
+    "native:build": "bun run scripts/build-native.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
     "bun-types": "^1.4.2",
+    "node-api-headers": "1.9.0",
     "typescript": "^7.0.2"
   },
   "dependencies": {

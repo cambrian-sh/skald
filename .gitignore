@@ -8,3 +8,4 @@ coverage/
 .release/
 # Native Afşin binaries are built from the pinned source during release jobs.
 /vendor/engine/*/codebase-memory-mcp*
+/vendor/engine/native/*/skald-safe-fs.node

@@ -13,9 +13,11 @@ bun run build
 
 Before building from a clean checkout, stage the host-specific Afşin engine as
 described in [CONTRIBUTING.md](CONTRIBUTING.md). Release CI builds the pinned
-engine and stages it automatically. Never add engine binaries: the root ignore
-rule prevents future untracked additions but cannot untrack a binary already
-committed. Review [RELEASING.md](RELEASING.md) before pushing or publishing.
+engine and the Skald filesystem helper automatically. `bun run check`,
+`bun run dev`, and `bun run build` compile the helper with `cc`. Never add
+generated engine or addon binaries: ignore rules prevent new files from being
+tracked but cannot untrack a blob already committed. Review
+[RELEASING.md](RELEASING.md) before pushing or publishing.
 
 Do not modify the existing Cambrian or `codebase-memory-mcp` repositories from
 this repository's implementation. Cambrian integration belongs behind a

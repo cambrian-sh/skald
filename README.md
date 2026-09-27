@@ -44,18 +44,20 @@ and its `.sha256` file from
 [GitHub Releases](https://github.com/cambrian-sh/skald/releases/latest), then
 verify with `shasum -a 256 -c skald-<os>-<arch>.sha256` (or
 `sha256sum -c skald-<os>-<arch>.sha256`), mark it executable, and run `setup`.
-The release also includes Skald's and Afşin's license texts. This build embeds the
-matching Afşin engine and does not require Bun or a separate engine download.
+The release also includes Skald's and Afşin's license texts. This build embeds
+the matching Afşin engine and Skald's descriptor-safe filesystem helper; it
+does not require Bun or a separate engine download.
 The exact release and registry setup is documented in [RELEASING.md](RELEASING.md).
 
 From this repository:
 
 First stage the pinned Afşin engine for this host as documented in
-[CONTRIBUTING.md](CONTRIBUTING.md). Then run:
+[CONTRIBUTING.md](CONTRIBUTING.md). Local source runs also need `cc` to build
+Skald's descriptor-safe filesystem helper. Then run:
 
 ```sh
 bun install
-bun run src/cli.ts setup
+bun run dev -- setup
 ```
 
 Skald will:
@@ -107,7 +109,8 @@ skald engine serve
 ```
 
 `setup` is the one-command path. The npm distribution installs its matching
-platform companion containing Afşin's asset, pinned to commit
+platform companion containing Afşin's asset and Skald's native filesystem
+helper, with the Afşin engine pinned to commit
 `cf1d310a72320ec55e7b86a091561162567e55d2`; setup copies it into the project
 boundary, verifies all 16 tools and required input schemas, records its
 SHA-256, and runs the initial index. No MCP path or `CBM_KNOWLEDGE_DIR` is
@@ -327,12 +330,13 @@ bun run check
 bun run build
 ```
 
-`bun run build` creates a standalone Bun executable at `dist/skald` and requires
-the pinned Afşin engine for the current host to be staged under
-`vendor/engine/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for a clean-checkout
-build; CI and release workflows build and stage the engine automatically. The
-compiled setup path creates a project-local executable runtime when source
-bundling is unavailable.
+`bun run build` first builds Skald's Node-API filesystem helper, then creates a
+standalone Bun executable at `dist/skald`. It requires a C compiler and the
+pinned Afşin engine for the current host staged under `vendor/engine/`. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for a clean-checkout build; CI and release
+workflows build and stage both native components automatically. The compiled
+setup path creates a project-local executable runtime when source bundling is
+unavailable.
 
 The Linux amd64 standalone path has been exercised through setup, indexing,
 Afşin conformance, and context retrieval. The four native release jobs, npm
@@ -343,7 +347,8 @@ verifies all 16 Afşin registry tools and required input fields; `--smoke`
 additionally exercises safe read-only graph operations against an indexed
 project. Each release build stages one native asset per supported platform with
 `bun run stage:engine` and packages its matching companion with
-`bun run package:release`. The release workflow merges and
+`bun run package:release`, including the target-matched Skald helper. Standalone
+builds embed both native components. The release workflow merges and
 validates all four manifests before producing exactly one universal root package.
 It publishes version-matched packages and self-contained executables from a
 `v<package-version>` tag; publishing the source tree directly remains blocked.

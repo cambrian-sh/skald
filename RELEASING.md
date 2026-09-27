@@ -2,13 +2,14 @@
 
 Skald releases are cut from a versioned commit on the repository's default
 branch. A release publishes one universal `@cambrian/skald` package, four
-OS/CPU-constrained Afşin engine companions, and four self-contained executable
-downloads.
+OS/CPU-constrained companions containing Afşin's engine and Skald's matching
+filesystem helper, and four self-contained executable downloads embedding both.
 
-Native engine executables are generated release assets, not Git source.
-`.gitignore` prevents new untracked binaries from being staged but cannot
-untrack a binary already committed. Inspect the published history before any
-push or release, and use the ship audit for current release readiness.
+Native engine executables and compiled filesystem helpers are generated release
+assets, not Git source. `.gitignore` prevents new untracked native files from
+being staged but cannot untrack a binary already committed. Inspect the
+published history before any push or release, and use the ship audit for
+current release readiness.
 
 Before enabling releases, protect the default branch with the repository's
 required review/CI checks and add a tag ruleset restricting `v*` creation to
@@ -23,9 +24,10 @@ With Bun 1.3 or newer:
 bunx @cambrian/skald setup
 ```
 
-The npm package installs only the native engine companion for the current OS
-and CPU. The standalone GitHub Release executables embed both Skald and Afşin
-and need no Bun or second download. The first release supports Linux
+The npm package installs only the native companion for the current OS and CPU.
+It contains Afşin's engine plus Skald's descriptor-relative filesystem helper.
+Standalone GitHub Release executables embed Skald and both native components and
+need no Bun or second download. The first release supports Linux
 amd64/arm64 and macOS arm64/amd64. Windows and BSD are not currently supported
 release targets.
 
@@ -40,8 +42,10 @@ release targets.
    git push origin vX.Y.Z
    ```
 
-3. The `Release assets` workflow builds the pinned Afşin commit on all four
-   native runners, verifies each binary and standalone executable, combines the
+3. The `Release assets` workflow verifies and extracts Skald's co-located,
+   SHA-256-pinned Afşin source archive, builds the pinned source on all four
+   native runners, builds the target-matched filesystem helper, verifies each
+   binary and standalone executable, combines the
    engine manifests, and refuses to package the universal CLI unless all four
    target assets are present and consistent.
 4. The workflow publishes companions first and the CLI package last using npm

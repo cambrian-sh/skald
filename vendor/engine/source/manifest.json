@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/afsin-asf/codebase-memory-mcp",
+  "commit": "cf1d310a72320ec55e7b86a091561162567e55d2",
+  "tree": "c39c43c25a012a7487efa53336a47eb96546f14a",
+  "archive": "afsin-cf1d310a72320ec55e7b86a091561162567e55d2.tar.gz",
+  "sha256": "13b0f8059b5a55a57ff35b120782d78756df1c8c9574b90a490bd92683002467",
+  "bytes": 90780526,
+  "format": "tar.gz",
+  "excludedPaths": [
+    {
+      "path": "codebase-memory-mcp-linux",
+      "reason": "A generated Linux/amd64 executable; native executables are built per release target."
+    },
+    {
+      "path": "vendored/zlib/libz.a",
+      "reason": "A generated architecture-specific static library; the source build links system zlib."
+    },
+    {
+      "path": "Formula",
+      "reason": "A repository-local symlink unused by Skald's source build."
+    }
+  ],
+  "createdWith": "git archive | gzip -9 -n"
+}

@@ -1,5 +1,6 @@
 import { expect, setDefaultTimeout, test } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { chmod, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { AFSIN_ENGINE } from "../src/engine/project"
@@ -60,7 +61,89 @@ test("universal release package includes the linked maintainer and product docs"
     expect(names).toContain("package/ARCHITECTURE.md")
     expect(names).toContain("package/product.md")
     expect(names).toContain("package/CHANGELOG.md")
+    expect(names).not.toContain("package/vendor/engine/native/skald-safe-fs.node")
   } finally {
     await rm(packageRoot, { force: true, recursive: true })
+  }
+})
+
+test("platform engine companion includes the native managed-filesystem addon", async () => {
+  const fixture = await mkdtemp(join(tmpdir(), "skald-engine-companion-"))
+  const output = join(fixture, "output")
+  const engineRoot = join(fixture, "vendor", "engine")
+  const binary = join(fixture, "engine")
+  const addon = join(engineRoot, "native", "linux-amd64", "skald-safe-fs.node")
+  const binaryBytes = Buffer.from("fake native Afşin engine")
+  const addonBytes = Buffer.from("fake Skald Node-API addon")
+  const digest = createHash("sha256").update(binaryBytes).digest("hex")
+
+  try {
+    await mkdir(engineRoot, { recursive: true })
+    await mkdir(join(engineRoot, "native", "linux-amd64"), { recursive: true })
+    await mkdir(output)
+    await cp(resolve(projectRoot, "LICENSE"), join(fixture, "LICENSE"))
+    await writeFile(
+      join(fixture, "package.json"),
+      JSON.stringify({
+        name: "@cambrian/skald",
+        version: "0.1.0",
+      }),
+    )
+    await writeFile(binary, binaryBytes)
+    await chmod(binary, 0o755)
+    await writeFile(addon, addonBytes)
+    await writeFile(join(engineRoot, "AFSIN-LICENSE"), "fixture license")
+    await writeFile(
+      join(engineRoot, "manifest.json"),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        engine: { name: "codebase-memory-mcp", channel: "afsin", ...AFSIN_ENGINE },
+        assets: [
+          {
+            platform: "linux",
+            arch: "amd64",
+            path: "linux-amd64/codebase-memory-mcp",
+            sha256: digest,
+            bytes: binaryBytes.byteLength,
+          },
+        ],
+      })}\n`,
+    )
+    await mkdir(join(engineRoot, "linux-amd64"), { recursive: true })
+    await cp(binary, join(engineRoot, "linux-amd64", "codebase-memory-mcp"))
+    await chmod(join(engineRoot, "linux-amd64", "codebase-memory-mcp"), 0o755)
+    const packed = Bun.spawnSync(
+      [
+        process.execPath,
+        "run",
+        resolve(projectRoot, "scripts/package-release.ts"),
+        "--binary",
+        binary,
+        "--addon",
+        addon,
+        "--platform",
+        "linux",
+        "--arch",
+        "amd64",
+        "--output",
+        output,
+      ],
+      { cwd: fixture, stdout: "pipe", stderr: "pipe" },
+    )
+    expect(packed.exitCode).toBe(0)
+
+    const archive = join(output, "cambrian-skald-engine-linux-amd64-0.1.0.tgz")
+    const entries = Bun.spawnSync(["tar", "-tzf", archive], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const names = new TextDecoder().decode(entries.stdout)
+    expect(entries.exitCode).toBe(0)
+    expect(names).toContain("package/LICENSE")
+    expect(names).toContain("package/vendor/engine/AFSIN-LICENSE")
+    expect(names).toContain("package/vendor/engine/linux-amd64/codebase-memory-mcp")
+    expect(names).toContain("package/vendor/engine/native/skald-safe-fs.node")
+  } finally {
+    await rm(fixture, { force: true, recursive: true })
   }
 })

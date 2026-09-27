@@ -29,6 +29,11 @@ coordinate disclosure and a fix before publishing exploit details.
 - Backend execution is bounded and supervised. Generated agent configuration
   routes an attested backend through Skald's verified runtime; secret-looking
   environment variables are not persisted into project configuration.
+- Managed project files are opened and changed relative to held directory
+  descriptors with no-follow OS operations on the supported Linux/macOS targets.
+  A small Skald-owned Node-API helper supplies those syscalls; bounded file
+  handling and publication policy stay in TypeScript. If the matching helper
+  is missing or invalid, managed operations fail closed.
 - Canonical knowledge outside the project requires explicit user approval.
   Session records are kept separate from promoted canonical records.
 

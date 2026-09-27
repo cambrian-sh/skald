@@ -51,6 +51,17 @@ async function assertBinary(
   return { bytes: stats.size, sha256: await sha256(path) }
 }
 
+async function assertNativeAddon(path: string): Promise<void> {
+  const stats = await lstat(path)
+  if (stats.isSymbolicLink() || !stats.isFile() || stats.size === 0) {
+    throw new Error(`Release native filesystem addon is not a regular file: ${path}`)
+  }
+}
+
+function expectedNativeAddon(target: SupportedTarget): string {
+  return resolve("vendor/engine/native", `${target.platform}-${target.arch}`, "skald-safe-fs.node")
+}
+
 async function verifyStagedAsset(
   target: SupportedTarget,
   asset: { readonly bytes: number; readonly sha256: string },
@@ -107,6 +118,7 @@ async function writeEnginePackage(
   root: string,
   target: SupportedTarget,
   binary: string,
+  addon: string,
   asset: { readonly bytes: number; readonly sha256: string },
   manifest: Record<string, unknown>,
   version: string,
@@ -127,7 +139,9 @@ async function writeEnginePackage(
         os: [target.os],
         cpu: [target.cpu],
         files: [
+          "LICENSE",
           `vendor/engine/${targetPath}/${binaryName(target)}`,
+          "vendor/engine/native/skald-safe-fs.node",
           "vendor/engine/AFSIN-LICENSE",
           "vendor/engine/manifest.json",
         ],
@@ -138,10 +152,13 @@ async function writeEnginePackage(
   )
   await writeFile(
     join(root, "README.md"),
-    `# ${packageName(target)}\n\nPinned native Afşin engine asset for Skald ${version}.\n\nSHA-256: ${asset.sha256}\nBytes: ${asset.bytes}\n`,
+    `# ${packageName(target)}\n\nPinned Afşin engine and Skald descriptor-safe filesystem addon for ${target.platform}/${target.arch}. Skald is MIT-licensed; Afşin's license is included separately.\n\nEngine SHA-256: ${asset.sha256}\nEngine bytes: ${asset.bytes}\n`,
   )
   await packageDirectory(join(root, "vendor", "engine", targetPath))
+  await packageDirectory(join(root, "vendor", "engine", "native"))
+  await cp("LICENSE", join(root, "LICENSE"))
   await cp(binary, join(root, "vendor", "engine", targetPath, binaryName(target)))
+  await cp(addon, join(root, "vendor", "engine", "native", "skald-safe-fs.node"))
   await cp("vendor/engine/AFSIN-LICENSE", join(root, "vendor", "engine", "AFSIN-LICENSE"))
   await writeFile(
     join(root, "vendor", "engine", "manifest.json"),
@@ -164,16 +181,21 @@ const args = Bun.argv.slice(2)
 try {
   const target = targetFor(requiredOption(args, "--platform"), requiredOption(args, "--arch"))
   const binary = resolve(requiredOption(args, "--binary"))
+  const addon = resolve(requiredOption(args, "--addon"))
+  if (addon !== expectedNativeAddon(target)) {
+    throw new Error(`Native filesystem addon path does not match ${target.platform}/${target.arch}`)
+  }
   const output = resolve(requiredOption(args, "--output"))
   const rootManifest = await readRootManifest()
   const version = rootManifest["version"]
   if (typeof version !== "string") throw new Error("Root package version is invalid")
   const asset = await assertBinary(binary)
+  await assertNativeAddon(addon)
   const manifest = await verifyStagedAsset(target, asset)
   await packageDirectory(output)
   const enginePackage = join(output, `engine-${target.platform}-${target.arch}`)
   await packageDirectory(enginePackage)
-  await writeEnginePackage(enginePackage, target, binary, asset, manifest, version)
+  await writeEnginePackage(enginePackage, target, binary, addon, asset, manifest, version)
   await pack(enginePackage, output)
   console.log(
     JSON.stringify({
@@ -181,6 +203,7 @@ try {
       target: `${target.platform}-${target.arch}`,
       packages: [packageName(target)],
       engine: asset,
+      nativeAddon: addon,
     }),
   )
 } catch (error) {

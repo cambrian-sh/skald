@@ -52,6 +52,11 @@ unreviewed session records out of Git while preserving promoted canonical
 knowledge as a shareable project artifact. Release CI builds native engine
 assets from Afşin's pinned source; `.gitignore` prevents new staged binaries
 from being added but cannot remove a blob already present in Git history.
+Skald's small first-party Node-API helper provides only no-follow,
+descriptor-relative filesystem primitives; TypeScript retains bounded reads,
+atomic writes, and policy. The helper is built for each native release target,
+shipped in the matching existing engine companion, and embedded in standalone
+executables. Missing helpers fail closed; there is no pathname-based fallback.
 Custom external knowledge roots remain explicit and user-approved. A custom backend is
 replaceable behind the Skald context contract but is never the official default.
 Initialization also publishes a project-local Skald context runtime with

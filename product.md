@@ -111,6 +111,10 @@ the four-target release workflow has not yet run. The CLI can:
 - install the bundled or platform-companion Afşin `codebase-memory-mcp` asset into `.skald/engine/`,
   verify its pinned commit and complete 16-tool contract, and retain its
   digest in project state;
+- use a small first-party Node-API helper for no-follow, descriptor-relative
+  managed-file operations on supported Linux/macOS targets; the helper ships in
+  the matching engine companion and standalone executable, while the
+  TypeScript runtime retains bounded reads, atomic writes, and policy;
 - create a managed `.skald/.gitignore` block so local engines, graph/cache
   state, launchers, and unreviewed session memory do not become accidental Git
   artifacts, while promoted canonical knowledge remains shareable;

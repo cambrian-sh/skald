@@ -12,3 +12,5 @@ release candidate and has not been published.
   installation.
 - Add a four-target Linux/macOS release pipeline, companion engine packages,
   standalone executables, checksums, and artifact attestations.
+- Bundle Skald's descriptor-safe native filesystem helper in the matching
+  platform companions and standalone executables.

@@ -8,7 +8,9 @@ host platform.
 
 - Bun 1.3 or newer; use 1.3.14 to match CI.
 - Git.
-- A C build toolchain and the dependencies required by Afşin's pinned
+- `cc` for Skald's Node-API filesystem helper, which local checks and source
+  commands build automatically.
+- The C toolchain and dependencies required by Afşin's pinned
   [`codebase-memory-mcp`](https://github.com/afsin-asf/codebase-memory-mcp)
   build script when producing a standalone executable locally.
 
@@ -19,7 +21,9 @@ bun install --frozen-lockfile
 bun run check
 ```
 
-`bun run check` runs TypeScript checking, Biome, and the isolated test suite.
+`bun run check` runs TypeScript checking, Biome, builds the host filesystem
+helper, and runs the isolated test suite. A C compiler is therefore required
+for the full source check on Linux and macOS.
 CI runs it on Linux and macOS. The Linux CI job also builds the pinned Afşin
 engine, stages it, and verifies the standalone Skald build. The source-only
 suite checks that setup fails without project writes when no engine is
@@ -28,15 +32,17 @@ standalone CLI with the staged engine.
 
 ## Local standalone build
 
-Release CI builds Afşin from commit
-`cf1d310a72320ec55e7b86a091561162567e55d2`; it does not download a checked-in
-binary. For a local build on Linux or macOS, build that commit and stage the
-native output for your current platform:
+The Skald repository co-locates a source-only archive of Afşin commit
+`cf1d310a72320ec55e7b86a091561162567e55d2`. Its SHA-256, byte count, source
+tree, and excluded generated artifacts are recorded in
+`vendor/engine/source/manifest.json`. CI verifies the archive before extracting
+and building it; it does not depend on a reachable Afşin Git remote. For a
+local build on Linux or macOS, extract the pinned source and stage the native
+output for your current platform:
 
 ```sh
 mkdir -p .release
-git clone https://github.com/afsin-asf/codebase-memory-mcp.git .release/afsin-engine
-git -C .release/afsin-engine checkout cf1d310a72320ec55e7b86a091561162567e55d2
+bun run extract:engine-source -- --destination .release/afsin-engine
 (cd .release/afsin-engine && scripts/build.sh)
 bun run stage:engine -- \
   --binary .release/afsin-engine/build/c/codebase-memory-mcp \

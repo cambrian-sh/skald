@@ -1,6 +1,6 @@
 # Skald comparison and ship audit
 
-Audit date: 2026-09-26
+Audit date: 2026-09-27
 
 This document compares the independent Skald product with the current Cambrian
 memory implementation, Afşin's codebase-memory-mcp work, and the original
@@ -30,13 +30,14 @@ does not expose a separate MCP `index_knowledge` tool in its 16-tool registry;
 Skald therefore owns the sync/reconcile orchestration and invokes the public
 `index_repository` contract after synchronization.
 
-The Linux/amd64 standalone artifact used for local verification embedded the
-root binary from the exact Afşin commit. Its engine SHA-256 was
-`e872396e13442358e6f677aff1b33df732d74797625b87db0f27dbb42212dafe`. The
-generated native executable has been removed from the publishable Git history;
-the source manifest is intentionally asset-free until a host-specific build is
-staged. The separate older 0.8.1 development binary is not used by the official
-path.
+The Linux/amd64 standalone artifact used for the 2026-09-27 QA embedded a binary
+built from the exact Afşin source archive. Its engine SHA-256 was
+`ccac834d8c866ad99b327ac3d683d02640124ff3d12f6226fac5e0fab7695ee2`; the
+standalone executable SHA-256 was
+`027690f5e702658e23b3fb0cec26db5580d692a10511578abcc7c5a7fd3e6089`. Generated
+native executables remain build artifacts and are not tracked in the publishable
+source tree. The separate older 0.8.1 development binary is not used by the
+official path.
 
 ## Capability comparison
 
@@ -258,13 +259,35 @@ The implementation review found and fixed these release-blocking issues:
     session memory. Project-specific rules are preserved, while promoted
     `.skald/knowledge-canonical/` records remain visible. A Git-status
     integration test verifies the real behavior.
-51. A clean checkout's CI build depended on the checked-in native executable.
-    CI now checks out Afşin's pinned commit, builds the runner-native binary,
-    stages it, then builds Skald. Root `.gitignore` also excludes future staged
-    engine files. This does not remove the existing blob from prior Git commits.
+51. A clean checkout's CI build depended on an unfetchable Afşin commit and a
+    checked-in native executable. Skald now carries a SHA-256-verified,
+    source-only archive of the exact Afşin commit; CI and release jobs extract
+    that snapshot, build the runner-native binary, and stage it without relying
+    on the Afşin Git remote. This does not remove the oversized historical blob
+    from prior Git commits.
 52. README links to user and maintainer guides now point to documents included
     in both the source package and the generated universal npm archive; a
     package-archive test checks the packed contents.
+53. The public CI run at the pushed baseline also failed on macOS because
+    `/dev/fd/<fd>/<child>` did not provide safe descriptor-relative traversal,
+    and process-group signaling returned `EPERM`. Managed reads/writes now use a
+    first-party Node-API adapter around `openat`/`fstatat`/`linkat`/`renameat`/
+    `unlinkat`, while bounded streaming and atomic-publication policy remain in
+    TypeScript. Child-process cleanup now uses a tested POSIX process-group
+    signal helper. Linux behavior is covered by the full public API security
+    tests; macOS remains unverified until the updated CI job runs.
+54. The filesystem helper was initially implemented but not included in release
+    artifacts. Standalone builds now embed it; each existing OS/CPU engine
+    companion packages its matching helper; the universal root package does not
+    duplicate the native asset. A release-package test inspects the archive,
+    and a Linux manual consumer test loaded the real addon from the packaged
+    companion and completed a managed write/read cycle.
+55. Standalone QA caught a compiled-mode detection error that sent the CLI to
+    companion lookup instead of extracting its embedded helper. Detection now
+    combines Bun's standalone flag with the existing executable-path check used
+    by Skald's project-runtime code. The rebuilt Linux binary completed setup,
+    Afşin contract conformance, and context retrieval; the context was expected
+    to report an unknown index because this setup smoke used `--no-index`.
 
 ## Original vision coverage
 
@@ -292,7 +315,7 @@ multi-platform release has executed. Remaining blockers include distribution
 integrity and release evidence:
 
 - the public [GitHub repository](https://github.com/cambrian-sh/skald) now has
-  the clean `master` baseline at `6f24d84cad63da0661e685b8183bb5441a02121d`.
+  the clean `master` baseline at `c6b350aa1b73f814216443855d21818814bf853e`.
   The branch contains no blob over 100 MB. Pre-rewrite history, including the
   294,355,704-byte engine blob, remains only in local backup refs and was not
   pushed;
@@ -316,10 +339,10 @@ commit contains the lower-level knowledge pipeline, but its MCP registry has no
 native `index_knowledge` operation; Skald's `knowledge index` lane is the
 supported product-level equivalent.
 
-During this audit, a clean archive of Afşin commit
-`cf1d310a72320ec55e7b86a091561162567e55d2` was built outside the reference
-worktree. Its executable SHA-256 was
-`66b55f596d46531efd945933c90c45588c673529b9e766d371e0ca9390e0cb12`.
+During this audit, the clean archive of Afşin commit
+`cf1d310a72320ec55e7b86a091561162567e55d2` was built from Skald's co-located
+snapshot. Its executable SHA-256 was
+`ccac834d8c866ad99b327ac3d683d02640124ff3d12f6226fac5e0fab7695ee2`.
 Skald's complete contract gate and read-only smoke gate both passed against
 that clean build. This is semantic/runtime evidence, not a publisher signature
 or a substitute for a future signed release asset.
@@ -329,20 +352,22 @@ the official engine.
 
 ## Release conclusion
 
-The source-only check passes 115 tests with one intentional skip when no
-Afşin asset is staged; the skipped Cambrian setup acceptance test was also run
-successfully against both a staged engine and the compiled standalone CLI.
-`bun run build` embeds the pinned engine, and a disposable project completed
-standalone setup while retaining Cambrian's canonical knowledge directory.
-Earlier end-to-end QA also covered fast indexing, 16-tool conformance, context
-retrieval, and doctor checks. The initial empty project's doctor result is
-`warn` only because it has no durable knowledge records; engine, index, and
-freshness checks pass.
+The 2026-09-27 Linux source check passes 120 tests with one intentional
+standalone-only skip and no failures. The rebuilt standalone CLI passed
+`--help`, `--version`, rejected an unknown command with exit 2, completed
+project setup, passed all 16 Afşin tool/schema conformance checks, and served a
+context response. A real platform companion archive contained both its Afşin
+binary and the 23 KB native helper; a temporary consumer loaded the helper from
+the package and performed a managed write/read. Earlier end-to-end QA also
+covered fast indexing and Cambrian knowledge preservation. The no-index manual
+smoke reports an unknown index as expected; it is not freshness/indexing
+evidence.
 
-This is not yet production-distributable to other developers. Local `master` is
-now pushed and tracks `origin/master`, and it is free of the historical 294 MB
-blob. However, the public npm package still returns E404 or no-access and the
-four native release jobs have not run. The supported claim today is limited to
-the locally verified Linux amd64 path; the official release matrix is
-Linux/macOS, not Windows/BSD. Do not describe Skald as released or universally
-supported until those gates have evidence.
+This is not yet production-distributable to other developers. The pushed
+`master` baseline is free of the historical 294 MB blob, but the public npm
+package has not been bootstrapped and trusted publishers are not configured.
+The updated macOS CI and four-target release/consumer matrix have not run; only
+Linux amd64 has fresh evidence for the new native helper and packaging path.
+The supported matrix remains Linux/macOS, not Windows/BSD. Do not describe
+Skald as released or universally validated until native CI and release gates
+have evidence.

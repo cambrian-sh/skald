@@ -9,6 +9,7 @@ const arch = process.arch === "x64" ? "amd64" : process.arch
 const filename = platform === "windows" ? "codebase-memory-mcp.exe" : "codebase-memory-mcp"
 const engineRoot = resolve("vendor/engine")
 const engineAsset = resolve(engineRoot, `${platform}-${arch}`, filename)
+const nativeAddon = resolve(engineRoot, "native", `${platform}-${arch}`, "skald-safe-fs.node")
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -61,6 +62,13 @@ async function verifyEngineAsset(): Promise<void> {
   }
 }
 
+async function verifyNativeAddon(): Promise<void> {
+  const stats = await lstat(nativeAddon)
+  if (stats.isSymbolicLink() || !stats.isFile() || stats.size === 0) {
+    throw new Error(`Native managed-filesystem addon is not a regular file: ${nativeAddon}`)
+  }
+}
+
 try {
   await verifyEngineAsset()
 } catch (error) {
@@ -73,9 +81,21 @@ try {
   throw error
 }
 
+try {
+  await verifyNativeAddon()
+} catch (error) {
+  if (errorCode(error) === "ENOENT") {
+    throw new Error(
+      `Missing native managed-filesystem addon for ${platform}/${arch}: ${nativeAddon}. ` +
+        "Build it with bun run native:build before compiling Skald.",
+    )
+  }
+  throw error
+}
+
 await mkdir("dist", { recursive: true })
 const build = await Bun.build({
-  entrypoints: ["src/cli.ts", engineAsset],
+  entrypoints: ["src/cli.ts", engineAsset, nativeAddon],
   compile: { outfile: "dist/skald" },
   target: "bun",
 })
@@ -85,5 +105,7 @@ if (!build.success) {
 } else {
   const digest = await sha256("dist/skald")
   await writeFile("dist/skald.sha256", `${digest}  skald\n`)
-  console.log(`Built dist/skald with embedded ${platform}/${arch} Afşin engine (${digest})`)
+  console.log(
+    `Built dist/skald with embedded ${platform}/${arch} Afşin engine and native filesystem addon (${digest})`,
+  )
 }
