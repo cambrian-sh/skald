@@ -102,18 +102,18 @@ test("platform engine companion includes the native managed-filesystem addon", a
         engine: { name: "codebase-memory-mcp", channel: "afsin", ...AFSIN_ENGINE },
         assets: [
           {
-            platform: "linux",
-            arch: "amd64",
-            path: "linux-amd64/codebase-memory-mcp",
+            platform,
+            arch,
+            path: `${platform}-${arch}/codebase-memory-mcp`,
             sha256: digest,
             bytes: binaryBytes.byteLength,
           },
         ],
       })}\n`,
     )
-    await mkdir(join(engineRoot, "linux-amd64"), { recursive: true })
-    await cp(binary, join(engineRoot, "linux-amd64", "codebase-memory-mcp"))
-    await chmod(join(engineRoot, "linux-amd64", "codebase-memory-mcp"), 0o755)
+    await mkdir(join(engineRoot, `${platform}-${arch}`), { recursive: true })
+    await cp(binary, join(engineRoot, `${platform}-${arch}`, "codebase-memory-mcp"))
+    await chmod(join(engineRoot, `${platform}-${arch}`, "codebase-memory-mcp"), 0o755)
     const packed = Bun.spawnSync(
       [
         process.execPath,
