@@ -320,9 +320,8 @@ multi-platform release has executed. Remaining blockers include distribution
 integrity and release evidence:
 
 - the public [GitHub repository](https://github.com/cambrian-sh/skald) now has
-  the clean `master` baseline at
-  `d17cee6763e7ea648fc02f529408f739bc89d704`.
-  The branch contains no blob over 100 MB. Pre-rewrite history, including the
+  the CI-verified source baseline on `master`; the published Git history
+  contains no blob over 100 MB. Pre-rewrite history, including the
   294,355,704-byte engine blob, remains only in local backup refs and was not
   pushed;
 - the npm registry returns E404 or no-access for `@cambrian/skald`. Bootstrap
@@ -361,7 +360,9 @@ the official engine.
 The 2026-09-27 push-triggered [CI run](https://github.com/cambrian-sh/skald/actions/runs/36335180992)
 on `d17cee6` completed successfully on Ubuntu and macOS. A fresh local Linux
 `bun run check` passed 121 tests with one intentional standalone-only skip and
-no failures. The rebuilt standalone CLI passed
+no failures. The subsequent audit-only documentation commit also passed its
+[Ubuntu/macOS CI run](https://github.com/cambrian-sh/skald/actions/runs/36335729136).
+The rebuilt standalone CLI passed
 `--help`, `--version`, rejected an unknown command with exit 2, completed
 project setup, passed all 16 Afşin tool/schema conformance checks, and served a
 context response. A real platform companion archive contained both its Afşin
