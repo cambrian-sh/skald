@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join, parse, relative, resolve, sep } from "node:path"
-import { signalProcessGroup } from "../process"
+import { signalProcessTree } from "../process"
 
 const DEFAULT_ENGINE_PACKAGE = "codebase-memory-mcp@0.10.8"
 const MAX_ENGINE_ARCHIVE_BYTES = 64 * 1024 * 1024
@@ -308,7 +308,7 @@ async function stopPackageInstall(child: ReturnType<typeof Bun.spawn>): Promise<
         )
         await Promise.race([treeKiller.exited, new Promise((resolve) => setTimeout(resolve, 250))])
       } else {
-        signalProcessGroup(child.pid, name)
+        signalProcessTree(child, name)
       }
     } catch (error) {
       if (!isProcessGone(error)) throw error

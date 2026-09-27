@@ -11,7 +11,7 @@ import {
 import { locateAnyManagedEngine } from "./engine/distribution"
 import { PROJECT_ENGINE_PATH, projectEngineEnvironment } from "./engine/project"
 import { EngineIntegrityError, EngineNotFoundError } from "./errors"
-import { signalProcessGroup } from "./process"
+import { signalProcessTree } from "./process"
 import { SKALD_VERSION } from "./version"
 
 const PROJECT_ENGINE_PATHS = [
@@ -322,7 +322,7 @@ async function signalChild(
     return
   }
   if (processGroup) {
-    signalProcessGroup(child.pid, signal)
+    signalProcessTree(child, signal)
     return
   }
   child.kill(signal)

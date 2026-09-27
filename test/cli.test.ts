@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { locateProjectEngineSource } from "../src/engine/project"
@@ -11,7 +11,7 @@ const hasManagedSetupEngine =
   (await locateProjectEngineSource(resolve(import.meta.dir, ".."))) !== undefined ||
   (standaloneCli !== undefined && standaloneCli.length > 0)
 const originalTrustDirectory = process.env["SKALD_TRUST_DIRECTORY"]
-const testTrustDirectory = join(tmpdir(), `skald-cli-trust-${process.pid}`)
+const testTrustDirectory = join(await realpath(tmpdir()), `skald-cli-trust-${process.pid}`)
 process.env["SKALD_TRUST_DIRECTORY"] = testTrustDirectory
 
 function testEnvironment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
@@ -363,7 +363,7 @@ test("reuses the existing Cambrian Claude engine for other agent configs", async
     { cwd: resolve(import.meta.dir, ".."), env: testEnvironment() },
   )
   const output = new TextDecoder().decode(result.stdout)
-  const contextRuntimePath = resolve(fixtureRoot, ".skald/context-runtime.mjs")
+  const contextRuntimePath = resolve(await realpath(fixtureRoot), ".skald/context-runtime.mjs")
   const bunExecutable = Bun.which("bun") ?? process.execPath
   const opencode = JSON.parse(await readFile(join(fixtureRoot, "opencode.json"), "utf8")) as {
     mcp: {
@@ -506,7 +506,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"structuredContent":{"indexed":
       "--root",
       fixtureRoot,
       "--mcp-command",
-      "/bin/true",
+      process.execPath,
     ],
     { cwd: resolve(import.meta.dir, ".."), env: testEnvironment() },
   )
@@ -531,7 +531,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"structuredContent":{"indexed":
   )
 
   expect(locate.exitCode).toBe(0)
-  expect(new TextDecoder().decode(locate.stdout)).toContain('"engine":"/bin/true"')
+  expect(new TextDecoder().decode(locate.stdout)).toContain(`"engine":"${process.execPath}"`)
   expect(index.exitCode).toBe(0)
   expect(new TextDecoder().decode(index.stdout)).toContain('"mode":"full"')
   expect(existsSync(join(fixtureRoot, ".skald", "state.json"))).toBe(true)

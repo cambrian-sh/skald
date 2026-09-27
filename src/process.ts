@@ -1,14 +1,24 @@
-export function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
-  const result = Bun.spawnSync(["/bin/kill", "-s", signal, `-${pid}`], {
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "pipe",
-  })
-  if (result.exitCode === 0) return
+type ChildProcess = Pick<ReturnType<typeof Bun.spawn>, "pid" | "exitCode" | "kill">
+type ProcessGroupSignaler = (pid: number, signal: NodeJS.Signals) => boolean
 
-  const detail = new TextDecoder().decode(result.stderr).trim()
-  if (detail.includes("No such process")) return
-  throw new Error(
-    `Could not signal process group ${pid} with ${signal}${detail.length === 0 ? "" : `: ${detail}`}`,
-  )
+function processGroupSignal(pid: number, signal: NodeJS.Signals): boolean {
+  try {
+    process.kill(-pid, signal)
+    return true
+  } catch (error) {
+    if (error instanceof Error && "code" in error && typeof error.code === "string") {
+      if (error.code === "ESRCH") return true
+      if (error.code === "EPERM") return false
+    }
+    throw error
+  }
+}
+
+export function signalProcessTree(
+  child: ChildProcess,
+  signal: NodeJS.Signals,
+  signalGroup: ProcessGroupSignaler = processGroupSignal,
+): void {
+  if (signalGroup(child.pid, signal)) return
+  if (child.exitCode === null) child.kill(signal)
 }

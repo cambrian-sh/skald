@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { discoverProject } from "../src/project/discover"
@@ -22,7 +22,7 @@ describe("discoverProject", () => {
 
     const discovery = await discoverProject(nestedPath)
 
-    expect(discovery.root).toBe(fixtureRoot)
+    expect(discovery.root).toBe(await realpath(fixtureRoot))
     expect(discovery.gitMarker).toBe("directory")
   })
 
@@ -32,7 +32,7 @@ describe("discoverProject", () => {
 
     const discovery = await discoverProject(fixtureRoot)
 
-    expect(discovery.root).toBe(fixtureRoot)
+    expect(discovery.root).toBe(await realpath(fixtureRoot))
     expect(discovery.gitMarker).toBe("file")
   })
 
@@ -43,7 +43,7 @@ describe("discoverProject", () => {
 
     const discovery = await discoverProject(fixtureRoot)
 
-    expect(discovery.root).toBe(fixtureRoot)
+    expect(discovery.root).toBe(await realpath(fixtureRoot))
     expect(discovery.gitMarker).toBe("workspace")
   })
 })

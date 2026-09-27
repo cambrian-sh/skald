@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ensureAgentMcpConfig } from "../src/agents/mcp"
@@ -40,7 +40,7 @@ test("returns source content and configured Cambrian knowledge", async () => {
     join(fixtureRoot, ".skills", "review", "SKILL.md"),
     "Review changed behavior and tests.",
   )
-  const knowledgeRoot = join(fixtureRoot, "cambrian-knowledge")
+  const knowledgeRoot = join(await realpath(fixtureRoot), "cambrian-knowledge")
   await mkdir(join(knowledgeRoot, "adrs"), { recursive: true })
   await writeFile(
     join(knowledgeRoot, "adrs", "ADR-001.md"),
@@ -63,8 +63,9 @@ test("returns source content and configured Cambrian knowledge", async () => {
     summary: "A session observation must remain available when canonical knowledge is external.",
   })
 
-  const bundle = await buildContextBundle(fixtureRoot)
-  const doctor = await diagnoseProject(fixtureRoot)
+  const canonicalFixtureRoot = await realpath(fixtureRoot)
+  const bundle = await buildContextBundle(canonicalFixtureRoot)
+  const doctor = await diagnoseProject(canonicalFixtureRoot)
 
   expect(
     bundle.items.some(

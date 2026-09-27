@@ -1,5 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { runKnowledgeCommand } from "../src/cli/context"
@@ -10,7 +10,10 @@ import { reconcileKnowledge, syncKnowledge } from "../src/knowledge/reconcile"
 import { trustMcpExecutable } from "../src/trust"
 
 let fixtureRoot: string | undefined
-const testTrustDirectory = join(tmpdir(), `skald-knowledge-reconcile-trust-${process.pid}`)
+const testTrustDirectory = join(
+  await realpath(tmpdir()),
+  `skald-knowledge-reconcile-trust-${process.pid}`,
+)
 process.env["SKALD_TRUST_DIRECTORY"] = testTrustDirectory
 
 function git(args: readonly string[]) {
@@ -167,7 +170,7 @@ done
     )
     await chmod(backend, 0o755)
     const sha256 = await mcpExecutableSha256(backend)
-    await trustMcpExecutable(root, { command: backend, args: [], sha256 })
+    await trustMcpExecutable(await realpath(root), { command: backend, args: [], sha256 })
     await ensureConfig(root, false, { command: backend, args: [], trust: "explicit", sha256 })
 
     const status = await runKnowledgeCommand({

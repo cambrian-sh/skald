@@ -1,6 +1,6 @@
 import { expect, setDefaultTimeout, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { chmod, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { chmod, cp, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { AFSIN_ENGINE } from "../src/engine/project"
@@ -68,11 +68,13 @@ test("universal release package includes the linked maintainer and product docs"
 })
 
 test("platform engine companion includes the native managed-filesystem addon", async () => {
-  const fixture = await mkdtemp(join(tmpdir(), "skald-engine-companion-"))
+  const fixture = await realpath(await mkdtemp(join(tmpdir(), "skald-engine-companion-")))
+  const platform = process.platform === "darwin" ? "darwin" : "linux"
+  const arch = process.arch === "x64" ? "amd64" : "arm64"
   const output = join(fixture, "output")
   const engineRoot = join(fixture, "vendor", "engine")
   const binary = join(fixture, "engine")
-  const addon = join(engineRoot, "native", "linux-amd64", "skald-safe-fs.node")
+  const addon = join(engineRoot, "native", `${platform}-${arch}`, "skald-safe-fs.node")
   const binaryBytes = Buffer.from("fake native Afşin engine")
   const addonBytes = Buffer.from("fake Skald Node-API addon")
   const digest = createHash("sha256").update(binaryBytes).digest("hex")
@@ -122,17 +124,21 @@ test("platform engine companion includes the native managed-filesystem addon", a
         "--addon",
         addon,
         "--platform",
-        "linux",
+        platform,
         "--arch",
-        "amd64",
+        arch,
         "--output",
         output,
       ],
       { cwd: fixture, stdout: "pipe", stderr: "pipe" },
     )
-    expect(packed.exitCode).toBe(0)
+    if (packed.exitCode !== 0) {
+      throw new Error(
+        `Engine companion packaging failed: ${new TextDecoder().decode(packed.stderr)}`,
+      )
+    }
 
-    const archive = join(output, "cambrian-skald-engine-linux-amd64-0.1.0.tgz")
+    const archive = join(output, `cambrian-skald-engine-${platform}-${arch}-0.1.0.tgz`)
     const entries = Bun.spawnSync(["tar", "-tzf", archive], {
       stdout: "pipe",
       stderr: "pipe",
@@ -141,7 +147,7 @@ test("platform engine companion includes the native managed-filesystem addon", a
     expect(entries.exitCode).toBe(0)
     expect(names).toContain("package/LICENSE")
     expect(names).toContain("package/vendor/engine/AFSIN-LICENSE")
-    expect(names).toContain("package/vendor/engine/linux-amd64/codebase-memory-mcp")
+    expect(names).toContain(`package/vendor/engine/${platform}-${arch}/codebase-memory-mcp`)
     expect(names).toContain("package/vendor/engine/native/skald-safe-fs.node")
   } finally {
     await rm(fixture, { force: true, recursive: true })

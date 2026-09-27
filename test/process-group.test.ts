@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { signalProcessGroup } from "../src/process"
+import { signalProcessTree } from "../src/process"
 
 function processIsAlive(pid: number): boolean {
   try {
@@ -51,7 +51,7 @@ test("signals the full detached process group, including spawned descendants", a
 
   try {
     expect(Number.isInteger(descendantPid)).toBe(true)
-    await signalProcessGroup(leader.pid, "SIGTERM")
+    signalProcessTree(leader, "SIGTERM")
     await leader.exited
     expect(processIsAlive(descendantPid)).toBe(false)
   } finally {
@@ -59,5 +59,24 @@ test("signals the full detached process group, including spawned descendants", a
     if (Number.isInteger(descendantPid) && processIsAlive(descendantPid)) {
       process.kill(descendantPid, "SIGKILL")
     }
+  }
+})
+
+test("falls back to the known child when process-group signaling is denied", async () => {
+  const child = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], {
+    detached: true,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+
+  try {
+    expect(child.exitCode).toBe(null)
+    signalProcessTree(child, "SIGTERM", () => false)
+    const exitCode = await child.exited
+    expect(exitCode).toBeGreaterThanOrEqual(128)
+    expect(child.signalCode).toBe("SIGTERM")
+  } finally {
+    if (child.exitCode === null) child.kill("SIGKILL")
   }
 })
