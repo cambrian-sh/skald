@@ -81,7 +81,7 @@ test("platform engine companion includes the native managed-filesystem addon", a
 
   try {
     await mkdir(engineRoot, { recursive: true })
-    await mkdir(join(engineRoot, "native", "linux-amd64"), { recursive: true })
+    await mkdir(join(engineRoot, "native", `${platform}-${arch}`), { recursive: true })
     await mkdir(output)
     await cp(resolve(projectRoot, "LICENSE"), join(fixture, "LICENSE"))
     await writeFile(
